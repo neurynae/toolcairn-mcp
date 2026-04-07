@@ -33,5 +33,5 @@ Thumbs.db
 npm-debug.log*
 pnpm-debug.log*
 
-# ToolCairn runtime files
-.toolcairn/events.jsonl
+# ToolCairn runtime files (auto-created at startup — not source controlled)
+apps/mcp-server/.toolcairn/
