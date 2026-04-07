@@ -1,0 +1,58 @@
+{
+  "name": "@neurynae/toolcairn-mcp",
+  "version": "0.8.3",
+  "private": false,
+  "license": "MIT",
+  "type": "module",
+  "description": "ToolCairn MCP — graph-powered tool intelligence for AI agents",
+  "homepage": "https://toolcairn.neurynae.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/NEURYNAE/toolcairn-mcp"
+  },
+  "keywords": [
+    "mcp",
+    "ai",
+    "tools",
+    "graph",
+    "developer-tools",
+    "toolcairn",
+    "neurynae",
+    "tool-intelligence"
+  ],
+  "bin": {
+    "toolcairn-mcp": "./bin/toolpilot-mcp.js"
+  },
+  "files": ["dist/", "bin/", "data/"],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "build:publish": "tsup",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "vitest run",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.7.0",
+    "pino": "^9.6.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@toolcairn/config": "workspace:*",
+    "@toolcairn/remote": "workspace:*",
+    "@toolcairn/tools-local": "workspace:*",
+    "@toolcairn/tsconfig": "workspace:*",
+    "@toolcairn/types": "workspace:*",
+    "@types/node": "^22.10.7",
+    "rimraf": "^6.0.1",
+    "tsup": "^8.5.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^3.0.4"
+  }
+}

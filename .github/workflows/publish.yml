@@ -1,0 +1,44 @@
+name: Publish to npm
+
+on:
+  push:
+    tags:
+      - 'v*'   # triggers on v0.1.0, v1.0.0, etc.
+
+jobs:
+  publish:
+    name: Publish @neurynae/toolcairn-mcp
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages in dependency order
+        run: |
+          pnpm --filter @toolcairn/tsconfig build || true
+          pnpm --filter @toolcairn/types build
+          pnpm --filter @toolcairn/config build
+          pnpm --filter @toolcairn/remote build
+          pnpm --filter @toolcairn/tools-local build
+          pnpm --filter @neurynae/toolcairn-mcp build:publish
+
+      - name: Publish @neurynae/toolcairn-mcp
+        run: cd apps/mcp-server && npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -1,0 +1,14 @@
+{
+  "extends": "@toolcairn/tsconfig/node.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": ["src"],
+  "references": [
+    { "path": "../../packages/config" },
+    { "path": "../../packages/remote" },
+    { "path": "../../packages/tools-local" },
+    { "path": "../../packages/types" }
+  ]
+}
