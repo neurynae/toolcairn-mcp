@@ -2,7 +2,7 @@
  * MCP Event Logger Middleware
  *
  * Wraps tool handlers to record timing, status, and metadata to:
- *   1. Prisma McpEvent table (queryable via DB)
+ *   1. POST /v1/events on the ToolCairn API (queryable via DB — McpEvent table)
  *   2. TOOLCAIRN_EVENTS_PATH JSONL file (for standalone tracker.html)
  *
  * All writes are fire-and-forget — NEVER block a tool response.
@@ -12,6 +12,8 @@
 import { appendFile, mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { config } from '@toolcairn/config';
+import { loadCredentials } from '@toolcairn/remote';
 import pino from 'pino';
 
 const logger = pino({ name: '@toolcairn/mcp-server:event-logger' });
@@ -80,6 +82,31 @@ async function writeToFile(eventsPath: string, event: McpEventRecord): Promise<v
   }
 }
 
+async function sendToApi(event: McpEventRecord): Promise<void> {
+  try {
+    const creds = await loadCredentials();
+    if (!creds) return;
+
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (creds.access_token) headers['Authorization'] = `Bearer ${creds.access_token}`;
+    if (creds.client_id) headers['X-ToolCairn-Key'] = creds.client_id;
+
+    await fetch(`${config.TOOLPILOT_API_URL}/v1/events`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        tool_name: event.tool_name,
+        query_id: event.query_id,
+        duration_ms: event.duration_ms,
+        status: event.status,
+        metadata: event.metadata,
+      }),
+    });
+  } catch (e) {
+    logger.debug({ err: e }, 'Failed to send event to API — non-fatal');
+  }
+}
+
 type ToolHandler<TArgs> = (args: TArgs) => Promise<CallToolResult>;
 
 /**
@@ -116,6 +143,9 @@ export function withEventLogging<TArgs extends Record<string, unknown>>(
         metadata: result ? extractMetadata(toolName, result) : null,
         created_at: new Date().toISOString(),
       };
+
+      // Fire-and-forget: API + local file (never block the tool response)
+      sendToApi(event).catch(() => {});
 
       const eventsPath = getEventsPath();
       if (eventsPath) {
