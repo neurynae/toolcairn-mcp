@@ -34,6 +34,7 @@ jobs:
           pnpm --filter @toolcairn/tsconfig build || true
           pnpm --filter @toolcairn/types build
           pnpm --filter @toolcairn/config build
+          pnpm --filter @toolcairn/errors build
           pnpm --filter @toolcairn/remote build
           pnpm --filter @toolcairn/tools-local build
           pnpm --filter @neurynae/toolcairn-mcp build:publish
