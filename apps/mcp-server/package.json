@@ -1,6 +1,6 @@
 {
   "name": "@neurynae/toolcairn-mcp",
-  "version": "0.8.5",
+  "version": "0.8.6",
   "private": false,
   "license": "MIT",
   "type": "module",
@@ -43,6 +43,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.7.0",
+    "@toolcairn/errors": "workspace:*",
     "pino": "^9.6.0",
     "zod": "^3.24.1"
   },
