@@ -1,6 +1,6 @@
 {
   "name": "@neurynae/toolcairn-mcp",
-  "version": "0.8.6",
+  "version": "0.8.7",
   "private": false,
   "license": "MIT",
   "type": "module",
@@ -23,7 +23,11 @@
   "bin": {
     "toolcairn-mcp": "./bin/toolpilot-mcp.js"
   },
-  "files": ["dist/", "bin/", "data/"],
+  "files": [
+    "dist/",
+    "bin/",
+    "data/"
+  ],
   "engines": {
     "node": ">=22.0.0"
   },
@@ -39,12 +43,12 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.7.0",
-    "@toolcairn/errors": "workspace:*",
     "pino": "^9.6.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
     "@toolcairn/config": "workspace:*",
+    "@toolcairn/errors": "workspace:*",
     "@toolcairn/remote": "workspace:*",
     "@toolcairn/tools-local": "workspace:*",
     "@toolcairn/tsconfig": "workspace:*",
