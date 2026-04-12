@@ -1,8 +1,8 @@
 import type { ConfirmedTool, ToolPilotProjectConfig, ToolSource } from '@toolcairn/types';
-import pino from 'pino';
+import { createMcpLogger } from '@toolcairn/errors';
 import { errResult, okResult } from '../utils.js';
 
-const logger = pino({ name: '@toolcairn/tools:init-project-config' });
+const logger = createMcpLogger({ name: '@toolcairn/tools:init-project-config' });
 
 export async function handleInitProjectConfig(args: {
   project_name: string;

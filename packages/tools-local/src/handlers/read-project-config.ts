@@ -1,8 +1,8 @@
 import type { ToolPilotProjectConfig } from '@toolcairn/types';
-import pino from 'pino';
+import { createMcpLogger } from '@toolcairn/errors';
 import { errResult, okResult } from '../utils.js';
 
-const logger = pino({ name: '@toolcairn/tools:read-project-config' });
+const logger = createMcpLogger({ name: '@toolcairn/tools:read-project-config' });
 
 // Tools older than this many days will be flagged for re-evaluation
 const STALENESS_THRESHOLD_DAYS = 90;

@@ -14,9 +14,9 @@ import { dirname } from 'node:path';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { config } from '@toolcairn/config';
 import { loadCredentials } from '@toolcairn/remote';
-import pino from 'pino';
+import { createMcpLogger } from '@toolcairn/errors';
 
-const logger = pino({ name: '@toolcairn/mcp-server:event-logger' });
+const logger = createMcpLogger({ name: '@toolcairn/mcp-server:event-logger' });
 
 function isTrackingEnabled(): boolean {
   return process.env.TOOLCAIRN_TRACKING_ENABLED !== 'false';

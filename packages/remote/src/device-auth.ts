@@ -7,6 +7,7 @@
  * On every subsequent startup, if this file exists and hasn't expired,
  * polling resumes automatically — no need to re-open the browser.
  */
+import { AuthError, ErrorCode, NetworkError } from '@toolcairn/errors';
 import {
   clearPendingAuth,
   loadPendingAuth,
@@ -67,7 +68,12 @@ async function openBrowser(url: string): Promise<void> {
  */
 export async function requestDeviceCode(apiUrl: string): Promise<DeviceCodeResponse> {
   const res = await fetch(`${apiUrl}/v1/auth/device-code`, { method: 'POST' });
-  if (!res.ok) throw new Error('Failed to start device auth. Check your internet connection.');
+  if (!res.ok) {
+    throw new NetworkError({
+      code: ErrorCode.ERR_NETWORK_UNREACHABLE,
+      message: 'Failed to start device auth. Check your internet connection.',
+    });
+  }
   const data = (await res.json()) as DeviceCodeResponse;
 
   // Persist immediately so polling can resume if this process is killed
@@ -161,9 +167,17 @@ async function pollForToken(
     if (data.error === 'authorization_pending') continue;
     if (data.error === 'expired_token') {
       await clearPendingAuth();
-      throw new Error('Device code expired. Please try again.');
+      throw new AuthError({
+        code: ErrorCode.ERR_AUTH_TOKEN_EXPIRED,
+        message: 'Device code expired. Please try again.',
+      });
     }
-    if (data.error) throw new Error(`Authorization failed: ${data.error}`);
+    if (data.error) {
+      throw new AuthError({
+        code: ErrorCode.ERR_AUTH_UNAUTHORIZED,
+        message: `Authorization failed: ${data.error}`,
+      });
+    }
     if (data.access_token) return data;
   }
 }

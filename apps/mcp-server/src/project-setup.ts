@@ -19,10 +19,10 @@
 import { access, mkdir, writeFile } from 'node:fs/promises';
 import { platform, type } from 'node:os';
 import { join } from 'node:path';
-import pino from 'pino';
+import { createMcpLogger } from '@toolcairn/errors';
 import { generateTrackerHtml } from './tools/generate-tracker.js';
 
-const logger = pino({ name: '@toolcairn/mcp-server:project-setup' });
+const logger = createMcpLogger({ name: '@toolcairn/mcp-server:project-setup' });
 
 /** Minimal config.json scaffold written on first run. */
 const INITIAL_CONFIG = {

@@ -7,6 +7,7 @@
   "include": ["src"],
   "references": [
     { "path": "../../packages/config" },
+    { "path": "../../packages/errors" },
     { "path": "../../packages/remote" },
     { "path": "../../packages/tools-local" },
     { "path": "../../packages/types" }

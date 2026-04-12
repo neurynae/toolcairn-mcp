@@ -7,6 +7,7 @@
  * Returns CallToolResult so the MCP server can pass responses through unchanged.
  */
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { ErrorCode } from '@toolcairn/errors';
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
@@ -125,7 +126,7 @@ export class ToolCairnClient {
             type: 'text',
             text: JSON.stringify({
               ok: false,
-              error: 'network_error',
+              error: ErrorCode.ERR_NETWORK_UNREACHABLE,
               message: `ToolCairn API unreachable: ${msg}. Check your internet connection or try again later.`,
             }),
           },

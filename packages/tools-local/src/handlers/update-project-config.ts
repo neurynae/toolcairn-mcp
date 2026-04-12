@@ -4,10 +4,10 @@ import type {
   ToolPilotProjectConfig,
   ToolSource,
 } from '@toolcairn/types';
-import pino from 'pino';
+import { createMcpLogger } from '@toolcairn/errors';
 import { errResult, okResult } from '../utils.js';
 
-const logger = pino({ name: '@toolcairn/tools:update-project-config' });
+const logger = createMcpLogger({ name: '@toolcairn/tools:update-project-config' });
 
 type UpdateAction = 'add_tool' | 'remove_tool' | 'update_tool' | 'add_evaluation';
 

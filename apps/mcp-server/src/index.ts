@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { config } from '@toolcairn/config';
 import { isTokenValid, loadCredentials, startDeviceAuth } from '@toolcairn/remote';
-import pino from 'pino';
+import { createMcpLogger } from '@toolcairn/errors';
 import { z } from 'zod';
 import { ensureProjectSetup } from './project-setup.js';
 import { buildProdServer } from './server.prod.js';
@@ -30,7 +30,7 @@ if (!process.env.NOMIC_API_KEY) {
   }
 }
 
-const logger = pino({ name: '@toolcairn/mcp-server' });
+const logger = createMcpLogger({ name: '@toolcairn/mcp-server' });
 
 /**
  * Builds a minimal server with only the toolcairn_auth tool.
@@ -138,6 +138,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  pino({ name: '@toolcairn/mcp-server' }).error({ err: error }, 'Failed to start MCP server');
+  createMcpLogger({ name: '@toolcairn/mcp-server' }).error({ err: error }, 'Failed to start MCP server');
   process.exit(1);
 });

@@ -21,7 +21,7 @@ import {
   requestDeviceCode,
   startDeviceAuth,
 } from '@toolcairn/remote';
-import pino from 'pino';
+import { createMcpLogger } from '@toolcairn/errors';
 import { z } from 'zod';
 import { ensureProjectSetup } from './project-setup.js';
 import { addToolsToServer, buildProdServer } from './server.prod.js';
@@ -29,7 +29,7 @@ import { createTransport } from './transport.js';
 
 process.env.TOOLPILOT_MODE = 'production';
 
-const logger = pino({ name: '@toolcairn/mcp-server' });
+const logger = createMcpLogger({ name: '@toolcairn/mcp-server' });
 
 async function main(): Promise<void> {
   await ensureProjectSetup();
@@ -118,6 +118,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  pino({ name: '@toolcairn/mcp-server' }).error({ err: error }, 'Failed to start MCP server');
+  createMcpLogger({ name: '@toolcairn/mcp-server' }).error({ err: error }, 'Failed to start MCP server');
   process.exit(1);
 });
