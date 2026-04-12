@@ -11,6 +11,7 @@
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { config } from '@toolcairn/config';
+import { createMcpLogger, withErrorHandling } from '@toolcairn/errors';
 import {
   ToolCairnClient,
   clearAuthentication,
@@ -43,11 +44,10 @@ import {
   updateProjectConfigSchema,
   verifySuggestionSchema,
 } from '@toolcairn/tools-local';
-import pino from 'pino';
 import { z } from 'zod';
 import { withEventLogging } from './middleware/event-logger.js';
 
-const logger = pino({ name: '@toolcairn/mcp-server:prod' });
+const logger = createMcpLogger({ name: '@toolcairn/mcp-server:prod' });
 
 const SETUP_INSTRUCTIONS = `
 # ToolCairn — Agent Setup Instructions
@@ -113,6 +113,21 @@ export async function addToolsToServer(server: McpServer): Promise<void> {
 
   logger.info({ user: creds.user_email }, 'Registering production tools');
 
+  /**
+   * Composes event logging + error handling around a tool handler.
+   * Execution order: withEventLogging → withErrorHandling → handler
+   * This ensures events are always recorded even when errors occur.
+   *
+   * Uses Record<string, unknown> at the composition boundary — individual
+   * handlers still receive the validated args from their own Zod schemas.
+   */
+  type AnyHandler = (
+    args: Record<string, unknown>,
+  ) => Promise<import('@modelcontextprotocol/sdk/types.js').CallToolResult>;
+  function wrap(toolName: string, fn: AnyHandler) {
+    return withEventLogging(toolName, withErrorHandling(toolName, logger, fn));
+  }
+
   // ── LOCAL tools (zero network, run on user's machine) ──────────────────────
 
   server.registerTool(
@@ -122,7 +137,7 @@ export async function addToolsToServer(server: McpServer): Promise<void> {
         'Classify a developer prompt to determine if ToolCairn tool search is needed. Returns a structured classification prompt for the agent to evaluate.',
       inputSchema: classifyPromptSchema,
     },
-    withEventLogging('classify_prompt', async (args) => handleClassifyPrompt(args)),
+    wrap('classify_prompt', async (args) => handleClassifyPrompt(args as Parameters<typeof handleClassifyPrompt>[0])),
   );
 
   server.registerTool(
@@ -132,7 +147,7 @@ export async function addToolsToServer(server: McpServer): Promise<void> {
         'Set up ToolCairn integration for the current project. Generates agent instruction content, MCP config entry, and project config initializer.',
       inputSchema: toolpilotInitSchema,
     },
-    withEventLogging('toolcairn_init', async (args) => handleToolcairnInit(args)),
+    wrap('toolcairn_init', async (args) => handleToolcairnInit(args as Parameters<typeof handleToolcairnInit>[0])),
   );
 
   server.registerTool(
@@ -142,7 +157,7 @@ export async function addToolsToServer(server: McpServer): Promise<void> {
         'Initialize a .toolcairn/config.json file for the current project. Returns the config JSON for the agent to write to disk.',
       inputSchema: initProjectConfigSchema,
     },
-    withEventLogging('init_project_config', async (args) => handleInitProjectConfig(args)),
+    wrap('init_project_config', async (args) => handleInitProjectConfig(args as Parameters<typeof handleInitProjectConfig>[0])),
   );
 
   server.registerTool(
@@ -152,7 +167,7 @@ export async function addToolsToServer(server: McpServer): Promise<void> {
         'Parse and validate a .toolcairn/config.json file. Returns confirmed tools, pending evaluations, stale tools, and agent instructions.',
       inputSchema: readProjectConfigSchema,
     },
-    withEventLogging('read_project_config', async (args) => handleReadProjectConfig(args)),
+    wrap('read_project_config', async (args) => handleReadProjectConfig(args as Parameters<typeof handleReadProjectConfig>[0])),
   );
 
   server.registerTool(
@@ -162,7 +177,7 @@ export async function addToolsToServer(server: McpServer): Promise<void> {
         'Apply a mutation to .toolcairn/config.json and return the updated content. Actions: add_tool, remove_tool, update_tool, add_evaluation.',
       inputSchema: updateProjectConfigSchema,
     },
-    withEventLogging('update_project_config', async (args) => handleUpdateProjectConfig(args)),
+    wrap('update_project_config', async (args) => handleUpdateProjectConfig(args as Parameters<typeof handleUpdateProjectConfig>[0])),
   );
 
   // ── REMOTE tools (one HTTP call each to ToolCairn API) ────────────────────
@@ -174,7 +189,7 @@ export async function addToolsToServer(server: McpServer): Promise<void> {
         'Search for the best tool for a specific need using a natural language query. Initiates a guided discovery session with clarification questions when needed.',
       inputSchema: searchToolsSchema,
     },
-    withEventLogging('search_tools', async (args) => remote.searchTools(args)),
+    wrap('search_tools', async (args) => remote.searchTools(args)),
   );
 
   server.registerTool(
@@ -184,17 +199,17 @@ export async function addToolsToServer(server: McpServer): Promise<void> {
         'Submit clarification answers for an in-progress tool search session and receive refined results.',
       inputSchema: searchToolsRespondSchema,
     },
-    withEventLogging('search_tools_respond', async (args) => remote.searchToolsRespond(args)),
+    wrap('search_tools_respond', async (args) => remote.searchToolsRespond(args)),
   );
 
   server.registerTool(
     'get_stack',
     {
       description:
-        'Get a recommended tool stack for a specific use case with optional deployment and language constraints.',
+        'Build a complementary tool stack for a project use case. Returns diverse, integration-aware tools across different functional layers (not competing alternatives), with docs, health signals, and notes on how stack members integrate with each other.',
       inputSchema: getStackSchema,
     },
-    withEventLogging('get_stack', async (args) => remote.getStack(args)),
+    wrap('get_stack', async (args) => remote.getStack(args)),
   );
 
   server.registerTool(
@@ -204,7 +219,7 @@ export async function addToolsToServer(server: McpServer): Promise<void> {
         'Check compatibility between two tools. Returns direct graph relationships and inferred compatibility from shared neighbors.',
       inputSchema: checkCompatibilitySchema,
     },
-    withEventLogging('check_compatibility', async (args) => remote.checkCompatibility(args)),
+    wrap('check_compatibility', async (args) => remote.checkCompatibility(args)),
   );
 
   server.registerTool(
@@ -214,7 +229,7 @@ export async function addToolsToServer(server: McpServer): Promise<void> {
         'Compare two tools head-to-head using health signals, graph relationships, and community data.',
       inputSchema: compareToolsSchema,
     },
-    withEventLogging('compare_tools', async (args) => remote.compareTools(args)),
+    wrap('compare_tools', async (args) => remote.compareTools(args)),
   );
 
   server.registerTool(
@@ -223,7 +238,7 @@ export async function addToolsToServer(server: McpServer): Promise<void> {
       description: 'Decompose a vague user use-case into specific, searchable tool requirements.',
       inputSchema: refineRequirementSchema,
     },
-    withEventLogging('refine_requirement', async (args) => remote.refineRequirement(args)),
+    wrap('refine_requirement', async (args) => remote.refineRequirement(args)),
   );
 
   server.registerTool(
@@ -233,7 +248,7 @@ export async function addToolsToServer(server: McpServer): Promise<void> {
         'LAST RESORT — check GitHub Issues for a known error after 4+ retries and docs review.',
       inputSchema: checkIssueSchema,
     },
-    withEventLogging('check_issue', async (args) => remote.checkIssue(args)),
+    wrap('check_issue', async (args) => remote.checkIssue(args)),
   );
 
   server.registerTool(
@@ -242,7 +257,7 @@ export async function addToolsToServer(server: McpServer): Promise<void> {
       description: 'Validate agent-suggested tools against the ToolCairn graph.',
       inputSchema: verifySuggestionSchema,
     },
-    withEventLogging('verify_suggestion', async (args) => remote.verifySuggestion(args)),
+    wrap('verify_suggestion', async (args) => remote.verifySuggestion(args)),
   );
 
   server.registerTool(
@@ -251,7 +266,7 @@ export async function addToolsToServer(server: McpServer): Promise<void> {
       description: 'Report the outcome of using a tool recommended by ToolCairn (fire-and-forget).',
       inputSchema: reportOutcomeSchema,
     },
-    withEventLogging('report_outcome', async (args) => remote.reportOutcome(args)),
+    wrap('report_outcome', async (args) => remote.reportOutcome(args)),
   );
 
   server.registerTool(
@@ -261,7 +276,7 @@ export async function addToolsToServer(server: McpServer): Promise<void> {
         'Suggest a new tool, relationship, use case, or health update to the ToolCairn graph.',
       inputSchema: suggestGraphUpdateSchema,
     },
-    withEventLogging('suggest_graph_update', async (args) => remote.suggestGraphUpdate(args)),
+    wrap('suggest_graph_update', async (args) => remote.suggestGraphUpdate(args)),
   );
 
   // ── AUTH tool (local — manages ~/.toolcairn/credentials.json) ─────────────
