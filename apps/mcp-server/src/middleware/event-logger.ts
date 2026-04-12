@@ -13,8 +13,8 @@ import { appendFile, mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { config } from '@toolcairn/config';
-import { loadCredentials } from '@toolcairn/remote';
 import { createMcpLogger } from '@toolcairn/errors';
+import { loadCredentials } from '@toolcairn/remote';
 
 const logger = createMcpLogger({ name: '@toolcairn/mcp-server:event-logger' });
 
@@ -88,7 +88,7 @@ async function sendToApi(event: McpEventRecord): Promise<void> {
     if (!creds) return;
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (creds.access_token) headers['Authorization'] = `Bearer ${creds.access_token}`;
+    if (creds.access_token) headers.Authorization = `Bearer ${creds.access_token}`;
     if (creds.client_id) headers['X-ToolCairn-Key'] = creds.client_id;
 
     await fetch(`${config.TOOLPILOT_API_URL}/v1/events`, {

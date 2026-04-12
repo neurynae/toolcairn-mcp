@@ -47,7 +47,9 @@ export interface CreateLoggerOptions {
  */
 export function createMcpLogger(opts: CreateLoggerOptions): Logger {
   const level =
-    opts.level ?? process.env.LOG_LEVEL ?? (process.env.NODE_ENV !== 'production' ? 'debug' : 'info');
+    opts.level ??
+    process.env.LOG_LEVEL ??
+    (process.env.NODE_ENV !== 'production' ? 'debug' : 'info');
 
   const pinoOpts: LoggerOptions = {
     name: opts.name,

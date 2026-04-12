@@ -1,5 +1,5 @@
-import type { ConfirmedTool, ToolPilotProjectConfig, ToolSource } from '@toolcairn/types';
 import { createMcpLogger } from '@toolcairn/errors';
+import type { ConfirmedTool, ToolPilotProjectConfig, ToolSource } from '@toolcairn/types';
 import { errResult, okResult } from '../utils.js';
 
 const logger = createMcpLogger({ name: '@toolcairn/tools:init-project-config' });

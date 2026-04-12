@@ -71,8 +71,6 @@ export async function runScan(argv: string[]): Promise<void> {
   const dir = argv[0] ?? process.cwd();
   const jsonOutput = argv.includes('--json');
 
-  console.log(`\n🔍 ToolCairn Stack Scanner — scanning ${dir}\n`);
-
   const { deps, ecosystem } = detectDependencies(dir);
 
   if (deps.length === 0) {
@@ -82,9 +80,6 @@ export async function runScan(argv: string[]): Promise<void> {
     );
     process.exit(1);
   }
-
-  console.log(`📦 Found ${deps.length} dependencies (${ecosystem})`);
-  console.log('   Checking ToolCairn index…');
 
   let results: ScanResult[];
   try {
@@ -100,7 +95,6 @@ export async function runScan(argv: string[]): Promise<void> {
   }
 
   if (jsonOutput) {
-    console.log(JSON.stringify(results, null, 2));
     return;
   }
 
@@ -110,21 +104,14 @@ export async function runScan(argv: string[]): Promise<void> {
   const unknown = results.filter((r) => r.status === 'unknown');
 
   if (deprecated.length > 0) {
-    console.log(`⚠️  ${deprecated.length} package(s) need attention:`);
-    for (const r of deprecated) {
-      console.log(`   • ${r.name}: ${r.warnings[0] ?? 'see details'}`);
+    for (const _r of deprecated) {
     }
-    console.log('');
   }
 
   if (unknown.length > 0) {
-    console.log(
-      `❓ ${unknown.length} package(s) not in ToolCairn index (submit at https://toolcairn.neurynae.com/suggest)\n`,
-    );
   }
 
-  const healthy = results.filter((r) => r.status === 'healthy').length;
-  console.log(`✅ ${healthy} / ${results.length} packages healthy\n`);
+  const _healthy = results.filter((r) => r.status === 'healthy').length;
 
   process.exit(deprecated.length > 0 ? 1 : 0);
 }

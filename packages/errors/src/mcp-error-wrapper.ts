@@ -1,7 +1,7 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { Logger } from 'pino';
-import { AppError } from './errors.js';
 import { ErrorCode } from './error-codes.js';
+import { AppError } from './errors.js';
 
 /**
  * Wraps an MCP tool handler with structured error handling.
@@ -32,13 +32,9 @@ export function withErrorHandling<TArgs>(
       return await handler(args);
     } catch (err) {
       if (err instanceof AppError) {
-        const logLevel =
-          err.severity === 'critical' || err.severity === 'high' ? 'error' : 'warn';
+        const logLevel = err.severity === 'critical' || err.severity === 'high' ? 'error' : 'warn';
 
-        logger[logLevel](
-          { err, tool: toolName },
-          `Tool ${toolName} failed: ${err.message}`,
-        );
+        logger[logLevel]({ err, tool: toolName }, `Tool ${toolName} failed: ${err.message}`);
 
         return {
           content: [
@@ -56,10 +52,7 @@ export function withErrorHandling<TArgs>(
       }
 
       // Unknown/programmer error
-      logger.error(
-        { err, tool: toolName },
-        `Unexpected error in tool ${toolName}`,
-      );
+      logger.error({ err, tool: toolName }, `Unexpected error in tool ${toolName}`);
 
       return {
         content: [

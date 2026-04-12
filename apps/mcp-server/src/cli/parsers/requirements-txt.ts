@@ -11,9 +11,7 @@ export function parseRequirementsTxt(dir: string): string[] {
         .filter((l) => l && !l.startsWith('#') && !l.startsWith('-r'))
         .map((l) => l.split(/[>=<!;[\s]/)[0]?.trim() ?? '')
         .filter(Boolean);
-    } catch {
-      continue;
-    }
+    } catch {}
   }
   return [];
 }

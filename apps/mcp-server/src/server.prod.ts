@@ -137,7 +137,9 @@ export async function addToolsToServer(server: McpServer): Promise<void> {
         'Classify a developer prompt to determine if ToolCairn tool search is needed. Returns a structured classification prompt for the agent to evaluate.',
       inputSchema: classifyPromptSchema,
     },
-    wrap('classify_prompt', async (args) => handleClassifyPrompt(args as Parameters<typeof handleClassifyPrompt>[0])),
+    wrap('classify_prompt', async (args) =>
+      handleClassifyPrompt(args as Parameters<typeof handleClassifyPrompt>[0]),
+    ),
   );
 
   server.registerTool(
@@ -147,7 +149,9 @@ export async function addToolsToServer(server: McpServer): Promise<void> {
         'Set up ToolCairn integration for the current project. Generates agent instruction content, MCP config entry, and project config initializer.',
       inputSchema: toolpilotInitSchema,
     },
-    wrap('toolcairn_init', async (args) => handleToolcairnInit(args as Parameters<typeof handleToolcairnInit>[0])),
+    wrap('toolcairn_init', async (args) =>
+      handleToolcairnInit(args as Parameters<typeof handleToolcairnInit>[0]),
+    ),
   );
 
   server.registerTool(
@@ -157,7 +161,9 @@ export async function addToolsToServer(server: McpServer): Promise<void> {
         'Initialize a .toolcairn/config.json file for the current project. Returns the config JSON for the agent to write to disk.',
       inputSchema: initProjectConfigSchema,
     },
-    wrap('init_project_config', async (args) => handleInitProjectConfig(args as Parameters<typeof handleInitProjectConfig>[0])),
+    wrap('init_project_config', async (args) =>
+      handleInitProjectConfig(args as Parameters<typeof handleInitProjectConfig>[0]),
+    ),
   );
 
   server.registerTool(
@@ -167,7 +173,9 @@ export async function addToolsToServer(server: McpServer): Promise<void> {
         'Parse and validate a .toolcairn/config.json file. Returns confirmed tools, pending evaluations, stale tools, and agent instructions.',
       inputSchema: readProjectConfigSchema,
     },
-    wrap('read_project_config', async (args) => handleReadProjectConfig(args as Parameters<typeof handleReadProjectConfig>[0])),
+    wrap('read_project_config', async (args) =>
+      handleReadProjectConfig(args as Parameters<typeof handleReadProjectConfig>[0]),
+    ),
   );
 
   server.registerTool(
@@ -177,7 +185,9 @@ export async function addToolsToServer(server: McpServer): Promise<void> {
         'Apply a mutation to .toolcairn/config.json and return the updated content. Actions: add_tool, remove_tool, update_tool, add_evaluation.',
       inputSchema: updateProjectConfigSchema,
     },
-    wrap('update_project_config', async (args) => handleUpdateProjectConfig(args as Parameters<typeof handleUpdateProjectConfig>[0])),
+    wrap('update_project_config', async (args) =>
+      handleUpdateProjectConfig(args as Parameters<typeof handleUpdateProjectConfig>[0]),
+    ),
   );
 
   // ── REMOTE tools (one HTTP call each to ToolCairn API) ────────────────────

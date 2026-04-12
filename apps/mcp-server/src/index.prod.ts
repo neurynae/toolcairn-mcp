@@ -14,6 +14,7 @@
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { config } from '@toolcairn/config';
+import { createMcpLogger } from '@toolcairn/errors';
 import {
   isTokenValid,
   loadCredentials,
@@ -21,7 +22,6 @@ import {
   requestDeviceCode,
   startDeviceAuth,
 } from '@toolcairn/remote';
-import { createMcpLogger } from '@toolcairn/errors';
 import { z } from 'zod';
 import { ensureProjectSetup } from './project-setup.js';
 import { addToolsToServer, buildProdServer } from './server.prod.js';
@@ -118,6 +118,9 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  createMcpLogger({ name: '@toolcairn/mcp-server' }).error({ err: error }, 'Failed to start MCP server');
+  createMcpLogger({ name: '@toolcairn/mcp-server' }).error(
+    { err: error },
+    'Failed to start MCP server',
+  );
   process.exit(1);
 });

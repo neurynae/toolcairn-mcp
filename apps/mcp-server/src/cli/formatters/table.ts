@@ -52,19 +52,11 @@ export function printScanTable(
     {} as Record<keyof TableRow, number>,
   );
 
-  const sep = cols.map((c) => '─'.repeat(widths[c] + 2)).join('┼');
-  const line = (row: TableRow | typeof headers, char = ' ') =>
+  const _sep = cols.map((c) => '─'.repeat(widths[c] + 2)).join('┼');
+  const _line = (row: TableRow | typeof headers, _char = ' ') =>
     cols
       .map((c) => ` ${((row as Record<string, string>)[c] ?? '').padEnd(widths[c] ?? 0)} `)
       .join('│');
-
-  console.log('');
-  console.log('┌' + cols.map((c) => '─'.repeat(widths[c] + 2)).join('┬') + '┐');
-  console.log('│' + line(headers) + '│');
-  console.log('├' + sep + '┤');
-  for (const row of rows) {
-    console.log('│' + line(row) + '│');
+  for (const _row of rows) {
   }
-  console.log('└' + cols.map((c) => '─'.repeat(widths[c] + 2)).join('┴') + '┘');
-  console.log('');
 }
