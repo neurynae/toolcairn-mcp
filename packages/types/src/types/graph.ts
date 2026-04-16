@@ -89,6 +89,8 @@ export interface ToolNode {
   docs: DocumentationLinks;
   /** GitHub topics / npm keywords — community-curated tags, persisted for graph mesh */
   topics: string[];
+  /** LLM-generated keyword sentence from README analysis. Comma-separated keywords. */
+  keyword_sentence?: string;
   created_at: string;
   updated_at: string;
 }
