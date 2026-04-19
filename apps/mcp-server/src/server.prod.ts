@@ -226,7 +226,7 @@ export async function addToolsToServer(server: McpServer): Promise<void> {
     'check_compatibility',
     {
       description:
-        'Check compatibility between two tools. Returns direct graph relationships and inferred compatibility from shared neighbors.',
+        'Check compatibility between two tools with version-aware matching. When both tools have declared dependency metadata (npm peerDependencies, PyPI requires_dist, etc.) the handler evaluates range constraints directly and returns a version_checks array plus runtime_requirements. Pass optional tool_a_version / tool_b_version to evaluate specific versions (e.g. "is next@14 compatible with react@17?"). Falls back to graph-edge + shared-neighbors inference when version metadata is unavailable. Response includes `source`: "declared_dependency" | "graph_edges" | "shared_neighbors".',
       inputSchema: checkCompatibilitySchema,
     },
     wrap('check_compatibility', async (args) => remote.checkCompatibility(args)),
