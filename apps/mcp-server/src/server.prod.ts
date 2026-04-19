@@ -216,7 +216,7 @@ export async function addToolsToServer(server: McpServer): Promise<void> {
     'get_stack',
     {
       description:
-        'Build a complementary tool stack for a project use case. For best results, call refine_requirement first with classification "stack_building", evaluate its decomposition_prompt to get sub-needs, then pass each {sub_need_type, keyword_sentence} object as a sub_needs entry. This lets get_stack keyword-match per layer (e.g. "web-framework", "database", "auth") instead of one broad search. Falls back to balanced search when sub_needs is omitted.',
+        'Build a complementary tool stack for a project use case. For best results, call refine_requirement first with classification "stack_building", evaluate its decomposition_prompt to get sub-needs, then pass each {sub_need_type, keyword_sentence} object as a sub_needs entry. This lets get_stack keyword-match per layer (e.g. "web-framework", "database", "auth") instead of one broad search. Falls back to balanced search when sub_needs is omitted. Each tool in the returned stack also carries a `version` object with the recommended version that is cross-compatible with the rest of the stack (downgraded from latest if needed to satisfy peer constraints), plus a top-level `compatibility_matrix` + `stack_compatibility` summarising cross-tool version fit.',
       inputSchema: getStackSchema,
     },
     wrap('get_stack', async (args) => remote.getStack(args)),
