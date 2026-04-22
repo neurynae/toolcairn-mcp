@@ -24,7 +24,7 @@ export async function handleInitProjectConfig(args: {
       source: t.source,
       version: t.version,
       chosen_at: now,
-      chosen_reason: 'Auto-detected from project files during toolpilot_init',
+      chosen_reason: 'Auto-detected from project files during toolcairn_init',
       alternatives_considered: [],
     }));
 
@@ -53,9 +53,9 @@ export async function handleInitProjectConfig(args: {
 
     return okResult({
       config_json,
-      file_path: '.toolpilot/config.json',
+      file_path: '.toolcairn/config.json',
       instructions:
-        'Create the directory .toolpilot/ in your project root (if it does not exist), then write this config_json content to .toolpilot/config.json. Also add .toolpilot/ to .gitignore if not already present.',
+        'Create the directory .toolcairn/ in your project root (if it does not exist), then write this config_json content to .toolcairn/config.json. Also add .toolcairn/ to .gitignore if not already present.',
       confirmed_count: confirmedTools.length,
       next_step:
         confirmedTools.length > 0

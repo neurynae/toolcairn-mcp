@@ -41,11 +41,11 @@ export async function handleUpdateProjectConfig(args: {
         if (!config.tools.confirmed.some((t) => t.name === args.tool_name)) {
           const newTool: ConfirmedTool = {
             name: args.tool_name,
-            source: (data.source as ToolSource) ?? 'toolpilot',
+            source: (data.source as ToolSource) ?? 'toolcairn',
             github_url: data.github_url as string | undefined,
             version: data.version as string | undefined,
             chosen_at: now,
-            chosen_reason: (data.chosen_reason as string) ?? 'Selected via ToolPilot',
+            chosen_reason: (data.chosen_reason as string) ?? 'Selected via ToolCairn',
             alternatives_considered: (data.alternatives_considered as string[]) ?? [],
             query_id: data.query_id as string | undefined,
             notes: data.notes as string | undefined,
@@ -57,7 +57,7 @@ export async function handleUpdateProjectConfig(args: {
           action: 'add_tool',
           tool: args.tool_name,
           timestamp: now,
-          reason: (data.chosen_reason as string) ?? 'Added via ToolPilot recommendation',
+          reason: (data.chosen_reason as string) ?? 'Added via ToolCairn recommendation',
         });
         break;
       }
@@ -131,12 +131,12 @@ export async function handleUpdateProjectConfig(args: {
 
     return okResult({
       updated_config_json,
-      file_path: '.toolpilot/config.json',
+      file_path: '.toolcairn/config.json',
       action_applied: args.action,
       tool_name: args.tool_name,
       confirmed_count: config.tools.confirmed.length,
       pending_count: config.tools.pending_evaluation.length,
-      instructions: 'Write updated_config_json to .toolpilot/config.json to persist this change.',
+      instructions: 'Write updated_config_json to .toolcairn/config.json to persist this change.',
     });
   } catch (e) {
     logger.error({ err: e }, 'update_project_config failed');

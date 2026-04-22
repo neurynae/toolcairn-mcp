@@ -1,7 +1,7 @@
 /**
  * Generate the standalone tracker.html content.
- * Called by toolpilot_init to produce the HTML file content.
- * The agent writes the returned content to .toolpilot/tracker.html
+ * Called by toolcairn_init to produce the HTML file content.
+ * The agent writes the returned content to .toolcairn/tracker.html
  */
 export function generateTrackerHtml(eventsPath: string): string {
   return `<!DOCTYPE html>
@@ -9,7 +9,7 @@ export function generateTrackerHtml(eventsPath: string): string {
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>ToolPilot Tracker</title>
+<title>ToolCairn Tracker</title>
 <style>
   :root {
     --bg: #0a0a0f;
@@ -106,7 +106,7 @@ export function generateTrackerHtml(eventsPath: string): string {
     <circle cx="10" cy="10" r="9" stroke="#7c5cfc" stroke-width="1.5"/>
     <path d="M6 10h8M10 6v8" stroke="#7c5cfc" stroke-width="1.5" stroke-linecap="round"/>
   </svg>
-  <h1><span>Tool</span>Pilot Tracker</h1>
+  <h1><span>Tool</span>Cairn Tracker</h1>
   <div id="statusText" style="font-size:12px; color:var(--muted);">Loading...</div>
   <div id="statusDot" class="status-dot paused"></div>
 </header>
@@ -135,7 +135,7 @@ export function generateTrackerHtml(eventsPath: string): string {
     <div class="empty" id="emptyState">
       <svg width="40" height="40" viewBox="0 0 40 40"><circle cx="20" cy="20" r="18" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M13 20h14M20 13v14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
       <p>Waiting for MCP tool calls...</p>
-      <code>Set TOOLPILOT_EVENTS_PATH in your MCP server env</code>
+      <code>Set TOOLCAIRN_EVENTS_PATH in your MCP server env</code>
     </div>
   </div>
   <div class="sidebar">
@@ -397,7 +397,7 @@ function renderAll() {
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 if (!EVENTS_PATH || EVENTS_PATH === 'null') {
   document.getElementById('statusText').textContent = 'No events path configured';
-  document.getElementById('emptyState').querySelector('p').textContent = 'TOOLPILOT_EVENTS_PATH not set in MCP server environment';
+  document.getElementById('emptyState').querySelector('p').textContent = 'TOOLCAIRN_EVENTS_PATH not set in MCP server environment';
 } else {
   startPolling();
 }

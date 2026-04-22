@@ -8,7 +8,7 @@ import {
 import { generateTrackerHtml } from '../templates/generate-tracker.js';
 import { errResult, okResult } from '../utils.js';
 
-const logger = createMcpLogger({ name: '@toolcairn/tools:toolpilot-init' });
+const logger = createMcpLogger({ name: '@toolcairn/tools:toolcairn-init' });
 
 export async function handleToolcairnInit(args: {
   agent: AgentType;
@@ -17,7 +17,7 @@ export async function handleToolcairnInit(args: {
   detected_files?: string[];
 }) {
   try {
-    logger.info({ agent: args.agent, project_root: args.project_root }, 'toolpilot_init called');
+    logger.info({ agent: args.agent, project_root: args.project_root }, 'toolcairn_init called');
 
     const instructions = getInstructionsForAgent(args.agent);
     const isOpenCode = args.agent === 'opencode';
@@ -30,12 +30,12 @@ export async function handleToolcairnInit(args: {
       (f) => f === mcpConfigFile || f.endsWith(`/${mcpConfigFile}`),
     );
     const hasInstructionFile = args.detected_files?.some((f) => f.endsWith(instructions.file_path));
-    const hasToolpilotConfig = args.detected_files?.some((f) =>
-      f.includes('.toolpilot/config.json'),
+    const hasToolcairnConfig = args.detected_files?.some((f) =>
+      f.includes('.toolcairn/config.json'),
     );
-    const hasTrackerHtml = args.detected_files?.some((f) => f.includes('.toolpilot/tracker.html'));
+    const hasTrackerHtml = args.detected_files?.some((f) => f.includes('.toolcairn/tracker.html'));
 
-    const eventsPath = `${args.project_root}/.toolpilot/events.jsonl`;
+    const eventsPath = `${args.project_root}/.toolcairn/events.jsonl`;
 
     const setupSteps: Array<{
       step: number;
@@ -61,8 +61,8 @@ export async function handleToolcairnInit(args: {
       ? JSON.stringify({ mcp: mcpConfigEntry }, null, 2)
       : JSON.stringify({ mcpServers: mcpConfigEntry }, null, 2);
     const mcpMergeNote = isOpenCode
-      ? `Merge the toolpilot entry into your existing ${mcpConfigFile} under "mcp"`
-      : `Merge the toolpilot entry into your existing ${mcpConfigFile} under "mcpServers"`;
+      ? `Merge the toolcairn entry into your existing ${mcpConfigFile} under "mcp"`
+      : `Merge the toolcairn entry into your existing ${mcpConfigFile} under "mcpServers"`;
     const mcpCreateNote = isOpenCode
       ? `Create ${mcpConfigFile} with this content (OpenCode MCP config format)`
       : `Create ${mcpConfigFile} with this content`;
@@ -74,12 +74,12 @@ export async function handleToolcairnInit(args: {
       note: hasMcpJson ? mcpMergeNote : mcpCreateNote,
     });
 
-    if (!hasToolpilotConfig) {
+    if (!hasToolcairnConfig) {
       setupSteps.push({
         step: step++,
         action: 'create',
-        file: '.toolpilot/config.json',
-        note: 'Call init_project_config to generate the config content, then write to .toolpilot/config.json',
+        file: '.toolcairn/config.json',
+        note: 'Call init_project_config to generate the config content, then write to .toolcairn/config.json',
       });
     }
 
@@ -87,9 +87,9 @@ export async function handleToolcairnInit(args: {
       setupSteps.push({
         step: step++,
         action: 'create',
-        file: '.toolpilot/tracker.html',
+        file: '.toolcairn/tracker.html',
         content: generateTrackerHtml(eventsPath),
-        note: `Open .toolpilot/tracker.html in your browser to monitor MCP tool calls in real time. Set TOOLPILOT_EVENTS_PATH=${eventsPath} in your MCP server environment to enable event logging.`,
+        note: `Open .toolcairn/tracker.html in your browser to monitor MCP tool calls in real time. Set TOOLCAIRN_EVENTS_PATH=${eventsPath} in your MCP server environment to enable event logging.`,
       });
     }
 
@@ -97,8 +97,8 @@ export async function handleToolcairnInit(args: {
       step: step++,
       action: 'append',
       file: '.gitignore',
-      content: '\n# ToolPilot\n.toolpilot/events.jsonl\n',
-      note: 'Add .toolpilot/events.jsonl to .gitignore (the tracker event log)',
+      content: '\n# ToolCairn\n.toolcairn/events.jsonl\n',
+      note: 'Add .toolcairn/events.jsonl to .gitignore (the tracker event log)',
     });
 
     const agentFileLabel: Record<AgentType, string> = {
@@ -118,22 +118,22 @@ export async function handleToolcairnInit(args: {
       mcp_config_entry: mcpConfigEntry,
       events_path: eventsPath,
       summary: [
-        `ToolPilot setup for ${args.agent} agent in ${args.project_root}`,
+        `ToolCairn setup for ${args.agent} agent in ${args.project_root}`,
         `Instructions will be added to: ${instructions.file_path}`,
-        `MCP server entry: toolpilot → ${mcpConfigFile}`,
-        hasToolpilotConfig
-          ? '.toolpilot/config.json already exists — skipping init'
-          : 'Run init_project_config next to generate .toolpilot/config.json',
+        `MCP server entry: toolcairn → ${mcpConfigFile}`,
+        hasToolcairnConfig
+          ? '.toolcairn/config.json already exists — skipping init'
+          : 'Run init_project_config next to generate .toolcairn/config.json',
         hasTrackerHtml
-          ? '.toolpilot/tracker.html already exists — skipping'
-          : 'Tracker dashboard: open .toolpilot/tracker.html in browser',
+          ? '.toolcairn/tracker.html already exists — skipping'
+          : 'Tracker dashboard: open .toolcairn/tracker.html in browser',
       ].join('\n'),
-      next_steps: hasToolpilotConfig
-        ? 'Setup complete. Open .toolpilot/tracker.html to monitor tool calls.'
-        : 'After completing setup steps, call init_project_config to initialize .toolpilot/config.json.',
+      next_steps: hasToolcairnConfig
+        ? 'Setup complete. Open .toolcairn/tracker.html to monitor tool calls.'
+        : 'After completing setup steps, call init_project_config to initialize .toolcairn/config.json.',
     });
   } catch (e) {
-    logger.error({ err: e }, 'toolpilot_init failed');
+    logger.error({ err: e }, 'toolcairn_init failed');
     return errResult('init_error', e instanceof Error ? e.message : String(e));
   }
 }

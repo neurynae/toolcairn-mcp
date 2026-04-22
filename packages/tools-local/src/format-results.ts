@@ -119,11 +119,11 @@ export function buildNonIndexedGuidance(
   if (results.length === 0) {
     return {
       message:
-        'No tools found for this query in the ToolPilot index. The tool you need may be proprietary, niche, or recently released.',
+        'No tools found for this query in the ToolCairn index. The tool you need may be proprietary, niche, or recently released.',
       agent_instructions: [
         'Search GitHub directly for the tool category described in the query.',
-        'If you find a relevant tool, add it to .toolpilot/config.json with source: "non_oss" or source: "manual".',
-        'Optionally call suggest_graph_update with suggestion_type: "new_tool" to add it to the ToolPilot index.',
+        'If you find a relevant tool, add it to .toolcairn/config.json with source: "non_oss" or source: "manual".',
+        'Optionally call suggest_graph_update with suggestion_type: "new_tool" to add it to the ToolCairn index.',
       ].join(' '),
       suggest_manual_add: true,
       proprietary_prone: false,
@@ -144,7 +144,7 @@ export function buildNonIndexedGuidance(
         isProprietaryProne
           ? 'This category often has proprietary options (e.g., Auth0, Datadog, Sentry) — consider asking the user if a paid option is acceptable.'
           : 'Consider searching GitHub for additional options.',
-        'Add any chosen tool to .toolpilot/config.json with update_project_config.',
+        'Add any chosen tool to .toolcairn/config.json with update_project_config.',
       ].join(' '),
       suggest_manual_add: true,
       proprietary_prone: isProprietaryProne,

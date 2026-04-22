@@ -12,7 +12,7 @@ export type PromptClassification =
   | 'debugging' // hitting an error or unexpected behavior
   | 'general_coding'; // architecture, business logic, no tool selection needed
 
-// Categories where ToolPilot search is useful
+// Categories where ToolCairn search is useful
 const TOOL_REQUIRED_CLASSIFICATIONS: PromptClassification[] = [
   'tool_discovery',
   'stack_building',
@@ -56,7 +56,7 @@ ${args.prompt}
 
 Your response (one category name only):`;
 
-    const needs_tool_search_prompt = `Based on this classification, determine if ToolPilot tool search should be invoked.
+    const needs_tool_search_prompt = `Based on this classification, determine if ToolCairn tool search should be invoked.
 Respond with 1 if the classification is one of: tool_discovery, stack_building, tool_comparison
 Respond with 0 if the classification is: tool_configuration, debugging, general_coding
 Respond with ONLY 0 or 1.`;
@@ -74,7 +74,7 @@ Respond with ONLY 0 or 1.`;
       ] as PromptClassification[],
       tool_required_if: TOOL_REQUIRED_CLASSIFICATIONS,
       instructions:
-        'Step 1: Send classification_prompt to the LLM and get a classification. Step 2: If classification is in tool_required_if, call refine_requirement with the classification. Otherwise, proceed without ToolPilot search.',
+        'Step 1: Send classification_prompt to the LLM and get a classification. Step 2: If classification is in tool_required_if, call refine_requirement with the classification. Otherwise, proceed without ToolCairn search.',
     });
   } catch (e) {
     logger.error({ err: e }, 'classify_prompt failed');
