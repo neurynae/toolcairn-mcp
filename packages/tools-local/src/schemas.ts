@@ -135,7 +135,8 @@ export const initProjectConfigSchema = {
     .array(
       z.object({
         name: z.string(),
-        source: z.enum(['toolpilot', 'manual', 'non_oss']),
+        // 'toolcairn' is the current canonical source; 'toolpilot' kept for pre-rename configs
+        source: z.enum(['toolcairn', 'toolpilot', 'manual', 'non_oss']),
         version: z.string().optional(),
       }),
     )

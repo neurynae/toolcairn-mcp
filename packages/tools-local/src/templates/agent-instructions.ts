@@ -20,12 +20,23 @@ interface InstructionTemplate {
   content: string;
 }
 
-const TOOLCAIRN_MCP_ENTRY = {
-  toolcairn: {
-    command: 'npx',
-    args: ['-y', '@neurynae/toolcairn-mcp'],
-  },
-};
+// On Windows, npx is a .cmd shim — Claude Code + many MCP clients require a
+// `cmd /c` wrapper to spawn it. Detect the target host at server runtime.
+const IS_WINDOWS = process.platform === 'win32';
+
+const TOOLCAIRN_MCP_ENTRY = IS_WINDOWS
+  ? {
+      toolcairn: {
+        command: 'cmd',
+        args: ['/c', 'npx', '-y', '@neurynae/toolcairn-mcp'],
+      },
+    }
+  : {
+      toolcairn: {
+        command: 'npx',
+        args: ['-y', '@neurynae/toolcairn-mcp'],
+      },
+    };
 
 const CORE_RULES = `
 ## ToolCairn — Tool Intelligence MCP
@@ -148,6 +159,7 @@ export function getInstructionsForAgent(agent: AgentType): InstructionTemplate {
 
 export function getMcpConfigEntry(serverPath?: string): Record<string, unknown> {
   if (serverPath) {
+    // Running a locally-built server: node <path> works cross-platform, no wrapper needed
     return {
       toolcairn: {
         command: 'node',
@@ -160,11 +172,22 @@ export function getMcpConfigEntry(serverPath?: string): Record<string, unknown> 
 
 /** Returns OpenCode-specific MCP config (opencode.json format under "mcp" key). */
 export function getOpenCodeMcpEntry(serverPath?: string): Record<string, unknown> {
-  const resolvedPath = serverPath;
+  if (serverPath) {
+    return {
+      toolcairn: {
+        type: 'local',
+        command: ['node', serverPath],
+        enabled: true,
+      },
+    };
+  }
+  const command = IS_WINDOWS
+    ? ['cmd', '/c', 'npx', '-y', '@neurynae/toolcairn-mcp']
+    : ['npx', '-y', '@neurynae/toolcairn-mcp'];
   return {
     toolcairn: {
       type: 'local',
-      command: resolvedPath ? ['node', resolvedPath] : ['npx', '-y', '@neurynae/toolcairn-mcp'],
+      command,
       enabled: true,
     },
   };
