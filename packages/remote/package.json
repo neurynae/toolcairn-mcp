@@ -20,7 +20,8 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.7.0",
-    "@toolcairn/errors": "workspace:*"
+    "@toolcairn/errors": "workspace:*",
+    "@toolcairn/types": "workspace:*"
   },
   "devDependencies": {
     "@toolcairn/tsconfig": "workspace:*",

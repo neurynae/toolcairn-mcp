@@ -8,6 +8,7 @@
  */
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { ErrorCode } from '@toolcairn/errors';
+import type { DiscoveryWarning, Ecosystem, MatchMethod } from '@toolcairn/types';
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
@@ -72,6 +73,125 @@ export class ToolCairnClient {
 
   async checkIssue(args: unknown): Promise<CallToolResult> {
     return this.post('/v1/intelligence/issue', args);
+  }
+
+  // ── Tool resolution ──────────────────────────────────────────────────────
+
+  /**
+   * Classify a batch of (ecosystem, name) tuples against the ToolCairn graph.
+   *
+   * Used by the discovery pipeline inside `toolcairn_init` — NOT exposed as an
+   * MCP tool to the agent. Returns typed data, not CallToolResult.
+   *
+   * Graceful degradation:
+   *   - HTTP 404 (endpoint not deployed yet): returns all inputs as unmatched,
+   *     with a warning.
+   *   - Network error / timeout: same.
+   *   - HTTP 200 but malformed body: logs a warning, returns unmatched.
+   *
+   * Caller (scan-project) uses the unmatched results to classify tools as
+   * `source: "non_oss"` and still returns a valid scan.
+   */
+  async batchResolve(items: Array<{ name: string; ecosystem: Ecosystem }>): Promise<{
+    results: Array<{
+      input: { name: string; ecosystem: Ecosystem };
+      matched: boolean;
+      match_method: MatchMethod;
+      tool?: { canonical_name: string; github_url: string; categories: string[] };
+    }>;
+    warnings: DiscoveryWarning[];
+    methods: Map<string, MatchMethod>;
+    githubUrls: Map<string, string>;
+  }> {
+    const warnings: DiscoveryWarning[] = [];
+    const methods = new Map<string, MatchMethod>();
+    const githubUrls = new Map<string, string>();
+
+    if (items.length === 0) {
+      return { results: [], warnings, methods, githubUrls };
+    }
+
+    try {
+      const res = await this.rawPost('/v1/tools/batch-resolve', {
+        api_version: '1',
+        tools: items,
+      });
+
+      if (res.status === 404) {
+        warnings.push({
+          scope: 'batch-resolve',
+          message:
+            '/v1/tools/batch-resolve not deployed on this engine — falling back to offline classification (source: non_oss).',
+        });
+        return {
+          results: items.map((input) => ({ input, matched: false, match_method: 'none' })),
+          warnings,
+          methods,
+          githubUrls,
+        };
+      }
+
+      if (!res.ok) {
+        warnings.push({
+          scope: 'batch-resolve',
+          message: `batch-resolve returned HTTP ${res.status} — all tools marked as non_oss.`,
+        });
+        return {
+          results: items.map((input) => ({ input, matched: false, match_method: 'none' })),
+          warnings,
+          methods,
+          githubUrls,
+        };
+      }
+
+      const body = (await res.json()) as {
+        resolved?: Array<{
+          input: { name: string; ecosystem: Ecosystem };
+          matched?: boolean;
+          match_method?: MatchMethod;
+          tool?: { canonical_name: string; github_url: string; categories: string[] };
+        }>;
+      };
+      if (!Array.isArray(body.resolved)) {
+        warnings.push({
+          scope: 'batch-resolve',
+          message: 'batch-resolve returned unexpected body shape — falling back.',
+        });
+        return {
+          results: items.map((input) => ({ input, matched: false, match_method: 'none' })),
+          warnings,
+          methods,
+          githubUrls,
+        };
+      }
+
+      const results: Array<{
+        input: { name: string; ecosystem: Ecosystem };
+        matched: boolean;
+        match_method: MatchMethod;
+        tool?: { canonical_name: string; github_url: string; categories: string[] };
+      }> = [];
+      for (const entry of body.resolved) {
+        const method = entry.match_method ?? (entry.matched ? 'tool_name_exact' : 'none');
+        const matched = entry.matched ?? method !== 'none';
+        const key = `${entry.input.ecosystem}:${entry.input.name}`;
+        methods.set(key, method);
+        if (entry.tool?.github_url) githubUrls.set(key, entry.tool.github_url);
+        results.push({ input: entry.input, matched, match_method: method, tool: entry.tool });
+      }
+      return { results, warnings, methods, githubUrls };
+    } catch (err) {
+      warnings.push({
+        scope: 'batch-resolve',
+        message: `batch-resolve network failure: ${err instanceof Error ? err.message : String(err)}. Tools classified as non_oss.`,
+      });
+      return {
+        results: items.map((input) => ({ input, matched: false, match_method: 'none' })),
+        warnings,
+        methods,
+        githubUrls,
+      };
+    }
   }
 
   // ── Feedback ─────────────────────────────────────────────────────────────

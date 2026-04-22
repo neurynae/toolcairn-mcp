@@ -1,19 +1,22 @@
 /**
- * Automatic project-level setup — runs at MCP server startup.
+ * Project-level setup hooks — runs once at MCP server startup.
  *
- * Detects the host OS, then creates the .toolcairn/ directory and base files
- * in process.cwd() (the project root where the user ran `npx @neurynae/toolcairn-mcp`).
+ * As of v0.10.0 the MCP server NO LONGER auto-scaffolds `.toolcairn/config.json`
+ * or `.toolcairn/events.jsonl`. Those files are owned by handler flows:
+ *   - `config.json` is created atomically by `mutateConfig` on the first call
+ *     that passes a `project_root` (cross-process locked, no race).
+ *   - `events.jsonl` is created on demand by the event-logger middleware when
+ *     `TOOLCAIRN_EVENTS_PATH` is set.
  *
- * This mirrors how credentials.json is auto-created in ~/.toolcairn at
- * startup, but for project-scoped files.
+ * What this module still does:
+ *   - Detects the host OS (for logging only).
+ *   - Writes `.toolcairn/tracker.html` — a read-only dashboard; safe to create at
+ *     startup because nothing else writes to it.
  *
- * Files created (only if absent — never overwrites existing):
- *   .toolcairn/config.json    — empty scaffold; agent fills project details
- *   .toolcairn/tracker.html   — full dashboard HTML (from generateTrackerHtml)
- *   .toolcairn/events.jsonl   — empty JSONL log; written to at runtime
- *
- * The agent still needs to run toolcairn_init + init_project_config to fill
- * in project.name, language, framework, and confirmed tools.
+ * The tracker's cwd placement is best-effort: `ensureProjectSetup` receives
+ * `projectRoot` from the caller (the stdio server boot). If the agent later
+ * invokes `toolcairn_init` with a different `project_root`, that handler bootstraps
+ * config.json at the correct location via its own cross-process lock.
  */
 
 import { access, mkdir, writeFile } from 'node:fs/promises';
@@ -23,21 +26,6 @@ import { createMcpLogger } from '@toolcairn/errors';
 import { generateTrackerHtml } from './tools/generate-tracker.js';
 
 const logger = createMcpLogger({ name: '@toolcairn/mcp-server:project-setup' });
-
-/** Minimal config.json scaffold written on first run. */
-const INITIAL_CONFIG = {
-  version: '1.0',
-  project: {
-    name: '',
-    language: '',
-    framework: '',
-  },
-  tools: {
-    confirmed: [],
-    pending_evaluation: [],
-  },
-  audit_log: [] as unknown[],
-};
 
 /**
  * Detect and return a human-readable OS label for logging.
@@ -67,8 +55,8 @@ function toFileUrl(absPath: string): string {
 }
 
 /**
- * Ensure .toolcairn/ and its base files exist in projectRoot.
- * Safe to call on every startup — skips files that already exist.
+ * Ensure `.toolcairn/tracker.html` exists in `projectRoot`. No-op if already present.
+ * Does NOT write `config.json` or `events.jsonl` — handlers own those.
  */
 export async function ensureProjectSetup(projectRoot = process.cwd()): Promise<void> {
   const os = detectOs();
@@ -78,28 +66,21 @@ export async function ensureProjectSetup(projectRoot = process.cwd()): Promise<v
   );
 
   const dir = join(projectRoot, '.toolcairn');
-  const configPath = join(dir, 'config.json');
   const trackerPath = join(dir, 'tracker.html');
-  const eventsPath = join(dir, 'events.jsonl');
+  const eventsPathAbs = join(dir, 'events.jsonl');
 
   // tracker.html embeds the events path in a file:// URL — must use forward slashes
-  const eventsPathForUrl = toFileUrl(eventsPath);
+  const eventsPathForUrl = toFileUrl(eventsPathAbs);
 
   try {
     await mkdir(dir, { recursive: true });
-
-    await createIfAbsent(configPath, JSON.stringify(INITIAL_CONFIG, null, 2), 'config.json');
     await createIfAbsent(trackerPath, generateTrackerHtml(eventsPathForUrl), 'tracker.html');
-
-    // events.jsonl starts empty — populated at runtime when TOOLCAIRN_EVENTS_PATH is set
-    await createIfAbsent(eventsPath, '', 'events.jsonl');
-
-    logger.info({ dir, os: os.label }, '.toolcairn setup ready');
+    logger.info({ dir, os: os.label }, '.toolcairn tracker ready');
   } catch (e) {
-    // Non-fatal — server still starts even if setup fails (read-only fs, permission denied, etc.)
+    // Non-fatal — server still starts even if setup fails (read-only fs, perms, etc.)
     logger.warn(
       { err: e, dir, os: os.label },
-      'Project setup failed — continuing without .toolcairn files',
+      'tracker.html setup failed — continuing (config.json still bootstrapped by handlers)',
     );
   }
 }

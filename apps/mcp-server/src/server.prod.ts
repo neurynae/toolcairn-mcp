@@ -29,18 +29,16 @@ import {
   compareToolsSchema,
   getStackSchema,
   handleClassifyPrompt,
-  handleInitProjectConfig,
   handleReadProjectConfig,
   handleToolcairnInit,
   handleUpdateProjectConfig,
-  initProjectConfigSchema,
   readProjectConfigSchema,
   refineRequirementSchema,
   reportOutcomeSchema,
   searchToolsRespondSchema,
   searchToolsSchema,
   suggestGraphUpdateSchema,
-  toolpilotInitSchema,
+  toolcairnInitSchema,
   updateProjectConfigSchema,
   verifySuggestionSchema,
 } from '@toolcairn/tools-local';
@@ -54,29 +52,41 @@ const SETUP_INSTRUCTIONS = `
 
 You are connected to the ToolCairn MCP server. ToolCairn is your active tool intelligence co-pilot.
 
+## The Server Owns .toolcairn/ (v0.10.0+)
+
+The MCP server reads and writes \`.toolcairn/config.json\` + \`.toolcairn/audit-log.jsonl\`
+atomically under a cross-process lock. You never touch those files directly.
+
 ## On Every Session Start — Do This First
 
-Read \`.toolcairn/config.json\` in the project root. The server auto-creates this file on startup,
-so it will almost always exist — but it may be an empty scaffold that still needs configuration.
+Call \`read_project_config\` with \`project_root\` (absolute path to the user's project).
+- If it returns \`status: "not_initialized"\`: the project has no config yet. Call
+  \`toolcairn_init\` with \`agent\` (your type) + \`project_root\`. The server walks
+  every workspace, parses manifests across 12 ecosystems, classifies tools against
+  the ToolCairn graph, and atomically writes \`.toolcairn/config.json\`.
+  After that, apply the returned \`setup_steps\` (append rules to CLAUDE.md,
+  merge the toolcairn entry into .mcp.json, update .gitignore).
+- If it returns \`status: "ready"\`: you have the full project snapshot. Review
+  \`stale_tools\` / \`pending_tools\` and proceed with work.
 
-### Case 1 — File does NOT exist (rare: read-only filesystem or manual deletion):
-1. List the project root files (package.json, requirements.txt, CLAUDE.md, .cursorrules, .mcp.json, etc.)
-2. Call \`toolcairn_init\` with your agent type, project root path, and the list of detected files.
-3. Call \`init_project_config\` — pass project name, language, framework, and any tools you detect.
-4. Write the returned \`config_json\` to \`.toolcairn/config.json\`.
+## Applying Mutations
 
-### Case 2 — File EXISTS but \`project.name\` is empty (auto-created scaffold — not yet configured):
-The server wrote the file at startup. You still need to fill in the project details:
-1. List the project root files to detect the tech stack.
-2. Call \`toolcairn_init\` with your agent type, project root, and detected files.
-   This appends ToolCairn rules to CLAUDE.md (or equivalent) and sets up the tracker.
-3. Call \`init_project_config\` with the project name, language, framework, and detected tools.
-4. Write the returned \`config_json\` to \`.toolcairn/config.json\` (overwrites the empty scaffold).
+When the user selects / replaces / drops a tool, call \`update_project_config\`
+with \`project_root\`, \`action\` (add_tool / remove_tool / update_tool / add_evaluation),
+and \`tool_name\`. The server:
+- atomically updates \`.toolcairn/config.json\`,
+- appends a new line to \`.toolcairn/audit-log.jsonl\` (FIFO-archived at 1000 entries),
+- returns the new \`last_audit_entry\` for your record.
 
-### Case 3 — File EXISTS and \`project.name\` is set (returning to a configured project):
-1. Call \`read_project_config\` with the file content.
-2. If \`stale_tools\` is non-empty, inform the user and offer to re-verify those tools.
-3. If \`pending_evaluation\` is non-empty, offer to run \`search_tools\` or \`compare_tools\`.
+Do NOT construct or write these files yourself — you do not have the cross-process
+lock that protects them.
+
+## Schema Migration
+
+Configs written by v0.9.x are on schema 1.0. The first \`read_project_config\` or
+\`update_project_config\` call after upgrade migrates in place to 1.1 (languages →
+array, frameworks → array, \`audit_log[]\` relocated from config.json to
+audit-log.jsonl). The migration is logged as an audit entry.
 
 ## When to Use ToolCairn Tools
 
@@ -146,23 +156,13 @@ export async function addToolsToServer(server: McpServer): Promise<void> {
     'toolcairn_init',
     {
       description:
-        'Set up ToolCairn integration for the current project. Generates agent instruction content, MCP config entry, and project config initializer.',
-      inputSchema: toolpilotInitSchema,
+        'Bootstrap ToolCairn for the current project. Walks every workspace, parses manifests across 12 ecosystems, classifies tools against the ToolCairn graph, and writes .toolcairn/config.json + audit-log.jsonl atomically. Returns setup_steps for CLAUDE.md / .mcp.json / .gitignore (agent applies those).',
+      inputSchema: toolcairnInitSchema,
     },
     wrap('toolcairn_init', async (args) =>
-      handleToolcairnInit(args as Parameters<typeof handleToolcairnInit>[0]),
-    ),
-  );
-
-  server.registerTool(
-    'init_project_config',
-    {
-      description:
-        'Initialize a .toolcairn/config.json file for the current project. Returns the config JSON for the agent to write to disk.',
-      inputSchema: initProjectConfigSchema,
-    },
-    wrap('init_project_config', async (args) =>
-      handleInitProjectConfig(args as Parameters<typeof handleInitProjectConfig>[0]),
+      handleToolcairnInit(args as Parameters<typeof handleToolcairnInit>[0], {
+        batchResolve: (items) => remote.batchResolve(items),
+      }),
     ),
   );
 
@@ -170,7 +170,7 @@ export async function addToolsToServer(server: McpServer): Promise<void> {
     'read_project_config',
     {
       description:
-        'Parse and validate a .toolcairn/config.json file. Returns confirmed tools, pending evaluations, stale tools, and agent instructions.',
+        'Read .toolcairn/config.json from disk and return the structured project snapshot: project metadata, confirmed tools, stale tools, pending evaluations, and last audit entry. Auto-migrates v1.0 configs to v1.1 on first read.',
       inputSchema: readProjectConfigSchema,
     },
     wrap('read_project_config', async (args) =>
@@ -182,7 +182,7 @@ export async function addToolsToServer(server: McpServer): Promise<void> {
     'update_project_config',
     {
       description:
-        'Apply a mutation to .toolcairn/config.json and return the updated content. Actions: add_tool, remove_tool, update_tool, add_evaluation.',
+        'Apply a mutation to .toolcairn/config.json (add_tool / remove_tool / update_tool / add_evaluation). The server atomically rewrites config.json and appends a new line to audit-log.jsonl under a cross-process lock. Requires project_root.',
       inputSchema: updateProjectConfigSchema,
     },
     wrap('update_project_config', async (args) =>

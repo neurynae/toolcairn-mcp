@@ -32,7 +32,16 @@ export default defineConfig({
   // Do NOT bundle these — let Node.js resolve them normally.
   // @toolcairn/db is lazy-imported in event-logger.ts (optional DB tracking).
   // Marking external prevents @prisma/client from being bundled at all.
-  external: ['@modelcontextprotocol/sdk', 'pino', 'zod'],
+  external: [
+    '@modelcontextprotocol/sdk',
+    'pino',
+    'zod',
+    'write-file-atomic',
+    'proper-lockfile',
+    'smol-toml',
+    'fast-xml-parser',
+    'yaml',
+  ],
   // Bundle all internal workspace packages (not on npm)
   noExternal: [/@toolcairn\/.*/],
   // Ensure node: imports work

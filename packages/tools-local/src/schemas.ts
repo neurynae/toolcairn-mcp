@@ -120,35 +120,20 @@ export const compareToolsSchema = {
   project_config: z.string().max(100_000).optional(),
 };
 
-export const toolpilotInitSchema = {
+export const toolcairnInitSchema = {
   agent: z.enum(['claude', 'cursor', 'windsurf', 'copilot', 'copilot-cli', 'opencode', 'generic']),
   project_root: z.string().min(1),
   server_path: z.string().optional(),
-  detected_files: z.array(z.string()).optional(),
-};
-
-export const initProjectConfigSchema = {
-  project_name: z.string().min(1).max(200),
-  language: z.string().min(1).max(50),
-  framework: z.string().optional(),
-  detected_tools: z
-    .array(
-      z.object({
-        name: z.string(),
-        // 'toolcairn' is the current canonical source; 'toolpilot' kept for pre-rename configs
-        source: z.enum(['toolcairn', 'toolpilot', 'manual', 'non_oss']),
-        version: z.string().optional(),
-      }),
-    )
-    .optional(),
 };
 
 export const readProjectConfigSchema = {
-  config_content: z.string().min(1).max(100_000),
+  project_root: z.string().min(1),
+  /** When true, the response includes per-tool `locations[]`. Default false (smaller payload). */
+  include_locations: z.boolean().optional(),
 };
 
 export const updateProjectConfigSchema = {
-  current_config: z.string().min(1).max(100_000),
+  project_root: z.string().min(1),
   action: z.enum(['add_tool', 'remove_tool', 'update_tool', 'add_evaluation']),
   tool_name: z.string().min(1),
   data: z.record(z.string(), z.unknown()).optional(),

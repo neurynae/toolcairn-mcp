@@ -43,16 +43,31 @@ const CORE_RULES = `
 
 ToolCairn is your tool intelligence co-pilot. It has a graph database of 500+ indexed tools with health signals, compatibility data, and known issue tracking. Always use it before recommending any tool, library, or framework.
 
+### The Server Owns .toolcairn/ (v0.10.0+)
+
+The MCP server reads and writes \`.toolcairn/config.json\` and
+\`.toolcairn/audit-log.jsonl\` atomically under a cross-process lock.
+NEVER read or write these files directly — call the MCP tools instead.
+
 ### Workflow for Tool Selection
 
-1. **Before recommending any tool**: Always call \`search_tools\` first. Never recommend from training data alone.
-2. **When user describes a use case**: Call \`classify_prompt\` first, then \`refine_requirement\` if tool selection is needed.
-3. **When starting a new project**: Call \`toolcairn_init\` to set up .toolcairn/config.json.
-4. **When resuming work on a project**: Read .toolcairn/config.json via \`read_project_config\` to see confirmed tools.
-5. **When a tool is selected**: Call \`update_project_config\` to persist the choice.
-6. **When encountering an error with a tool**: Call \`check_issue\` before debugging — it may be a known issue with an open GitHub ticket.
-7. **When user asks to compare tools**: Call \`compare_tools\` for a structured comparison with health data.
-8. **When user chooses a non-indexed/proprietary tool**: Add it to config with source: "non_oss" via \`update_project_config\`.
+1. **Session start**: Call \`read_project_config\` with the project_root. If it returns
+   \`status: "not_initialized"\`, call \`toolcairn_init\` which auto-discovers the stack
+   (parses manifests across 12 ecosystems, classifies against the ToolCairn graph, and
+   writes \`.toolcairn/config.json\`). Then apply the returned setup_steps for CLAUDE.md
+   + .mcp.json + .gitignore.
+2. **Before recommending any tool**: Call \`search_tools\` first. Never recommend from
+   training data alone.
+3. **When user describes a use case**: Call \`classify_prompt\`, then \`refine_requirement\`
+   if tool selection is needed.
+4. **When a tool is selected / replaced / dropped**: Call \`update_project_config\` with
+   project_root + action — the server atomically updates config.json and appends to
+   audit-log.jsonl.
+5. **When encountering an error with a tool**: Call \`check_issue\` before debugging —
+   it may be a known issue with an open GitHub ticket.
+6. **When user asks to compare tools**: Call \`compare_tools\`.
+7. **When user chooses a non-indexed/proprietary tool**: Call \`update_project_config\`
+   with \`data: { source: "non_oss" }\`.
 
 ### Available ToolCairn MCP Tools
 
@@ -67,16 +82,16 @@ ToolCairn is your tool intelligence co-pilot. It has a graph database of 500+ in
 | \`check_compatibility\` | Check if two tools work well together |
 | \`compare_tools\` | Compare two tools with health and graph data |
 | \`report_outcome\` | Report whether a recommended tool worked (improves future results) |
-| \`toolcairn_init\` | Set up ToolCairn for a new project |
-| \`init_project_config\` | Initialize .toolcairn/config.json |
-| \`read_project_config\` | Parse .toolcairn/config.json to get confirmed tools |
-| \`update_project_config\` | Add/remove/update tools in .toolcairn/config.json |
+| \`toolcairn_init\` | One-call project bootstrap (auto-discovers + writes config.json) |
+| \`read_project_config\` | Read .toolcairn/config.json from disk (returns structured snapshot) |
+| \`update_project_config\` | Apply a mutation (add_tool / remove_tool / update_tool / add_evaluation) |
 | \`suggest_graph_update\` | Suggest a new tool or relationship for the ToolCairn graph |
 
 ### Rules
 
-- NEVER recommend a tool without first checking ToolCairn unless the tool is already in .toolcairn/config.json
-- Always check .toolcairn/config.json at the start of a session if it exists
+- NEVER recommend a tool without first checking ToolCairn unless the tool is already in the project config
+- Always call \`read_project_config\` at the start of a session
+- NEVER write to .toolcairn/config.json or .toolcairn/audit-log.jsonl yourself — the server owns them
 - Prefer open-source tools from ToolCairn index; flag proprietary alternatives clearly
 - After selecting a tool, always call \`update_project_config\` to persist it
 - After using a tool successfully/unsuccessfully, call \`report_outcome\`

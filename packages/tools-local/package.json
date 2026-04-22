@@ -16,19 +16,30 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
+    "test:unit": "vitest run",
+    "test:watch": "vitest",
     "clean": "rimraf dist"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.7.0",
     "@toolcairn/errors": "workspace:*",
+    "@toolcairn/remote": "workspace:*",
     "@toolcairn/types": "workspace:*",
+    "fast-xml-parser": "^4.5.1",
     "pino": "^9.6.0",
+    "proper-lockfile": "^4.1.2",
+    "smol-toml": "^1.3.1",
+    "write-file-atomic": "^6.0.0",
+    "yaml": "^2.7.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
     "@toolcairn/tsconfig": "workspace:*",
     "@types/node": "^22.10.7",
+    "@types/proper-lockfile": "^4.1.4",
+    "@types/write-file-atomic": "^4.0.3",
     "rimraf": "^6.0.1",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^3.0.4"
   }
 }
