@@ -17,6 +17,7 @@ import { detectEcosystems } from './ecosystem-detect.js';
 import { type BatchResolveResult, detectFrameworks } from './frameworks/detect.js';
 import { detectLanguages } from './language-detect.js';
 import { PARSERS } from './parsers/index.js';
+import { RESOLVERS } from './resolvers/index.js';
 import type { DetectedTool } from './types.js';
 import { fileExists } from './util/fs.js';
 import { toRelPosix } from './workspaces/glob.js';
@@ -24,8 +25,25 @@ import { discoverWorkspaces } from './workspaces/walker.js';
 
 const logger = createMcpLogger({ name: '@toolcairn/tools:scan-project' });
 
+/** Per-input payload for the MCP-to-engine batch-resolve call. */
+export type BatchResolveItem = {
+  name: string;
+  ecosystem: Ecosystem;
+  /**
+   * Canonical package name from the INSTALLED manifest (e.g. resolves npm
+   * aliased installs). Engine uses this over `name` when present.
+   */
+  canonical_package_name?: string;
+  /**
+   * Authoritative repository URL extracted from the installed package's own
+   * manifest. Drives the engine's `exact_github` match tier — unambiguous
+   * even when registry keys are mis-indexed.
+   */
+  github_url?: string;
+};
+
 /** Resolver signature — the MCP handler injects a function backed by @toolcairn/remote. */
-export type BatchResolveFn = (items: Array<{ name: string; ecosystem: Ecosystem }>) => Promise<{
+export type BatchResolveFn = (items: BatchResolveItem[]) => Promise<{
   results: BatchResolveResult[];
   warnings: DiscoveryWarning[];
   /** Match methods per resolved entry (keyed by "ecosystem:name"). */
@@ -126,7 +144,15 @@ export async function scanProject(
   // --- 4. Merge dedupe by (ecosystem, name) → locations[] ---------------
   const mergedMap = new Map<
     string,
-    { name: string; ecosystem: Ecosystem; locations: ToolLocation[] }
+    {
+      name: string;
+      ecosystem: Ecosystem;
+      locations: ToolLocation[];
+      /** From local resolver — sent to engine so it can use exact_channel via the true package name. */
+      canonical_package_name?: string;
+      /** From local resolver — authoritative github_url the client extracted from the installed manifest. */
+      local_github_url?: string;
+    }
   >();
   for (const dep of allDetected) {
     const key = `${dep.ecosystem}:${dep.name}`;
@@ -153,12 +179,56 @@ export async function scanProject(
     }
   }
 
+  // --- 4.5. Per-tool local identity enrichment --------------------------
+  // Walk each merged entry, invoke the per-ecosystem resolver against the
+  // first location whose workspace has the installed package available.
+  // This is the cheapest reliable source of (canonical_package_name, github_url)
+  // — read from the user's installed dep's own manifest instead of trusting
+  // the server-side `package_managers` index.
+  await Promise.all(
+    [...mergedMap.values()].map(async (entry) => {
+      const resolver = RESOLVERS[entry.ecosystem];
+      if (!resolver) return;
+      for (const loc of entry.locations) {
+        const workspaceAbs = resolve(absRoot, loc.workspace_path);
+        const hints = { resolved_version: loc.resolved_version };
+        try {
+          const identity = await resolver(workspaceAbs, absRoot, entry.name, hints);
+          if (identity.canonical_package_name) {
+            entry.canonical_package_name = identity.canonical_package_name;
+          }
+          if (identity.github_url) {
+            entry.local_github_url = identity.github_url;
+          }
+          if (identity.canonical_package_name || identity.github_url) break;
+        } catch (err) {
+          logger.debug(
+            {
+              ecosystem: entry.ecosystem,
+              name: entry.name,
+              workspace: loc.workspace_path,
+              err: err instanceof Error ? err.message : String(err),
+            },
+            'Resolver threw — skipping this location',
+          );
+        }
+      }
+    }),
+  );
+
   // --- 5. Language detection ---------------------------------------------
   const workspaceRels = workspaceAbs.map((abs) => toRelPosix(absRoot, abs));
   const languages = await detectLanguages(absRoot, workspaceRels);
 
   // --- 6. Batch-resolve against the graph -------------------------------
-  const resolveInputs = [...mergedMap.values()].map(({ name, ecosystem }) => ({ name, ecosystem }));
+  const resolveInputs = [...mergedMap.values()].map(
+    ({ name, ecosystem, canonical_package_name, local_github_url }) => ({
+      name,
+      ecosystem,
+      canonical_package_name,
+      github_url: local_github_url,
+    }),
+  );
   const resolved = new Map<string, BatchResolveResult>();
   const methods = new Map<string, MatchMethod>();
   const githubUrls = new Map<string, string>();
@@ -195,7 +265,7 @@ export async function scanProject(
   const confirmed: ConfirmedTool[] = [];
   let toolsResolvedCount = 0;
 
-  for (const { name, ecosystem, locations } of mergedMap.values()) {
+  for (const { name, ecosystem, locations, local_github_url } of mergedMap.values()) {
     const key = `${ecosystem}:${name}`;
     const graph = resolved.get(key);
     const matchMethod = methods.get(key) ?? 'none';
@@ -205,7 +275,11 @@ export async function scanProject(
     const source: ToolSource = matched ? 'toolcairn' : 'non_oss';
     const canonical = graph?.tool?.canonical_name;
     const categories = graph?.tool?.categories;
-    const github_url = githubUrls.get(key);
+    // Prefer the graph's canonical github_url (authoritative for the matched
+    // Tool). When the engine has no match, fall back to the URL we pulled
+    // locally from the installed package manifest — still strictly better
+    // than `undefined` for agent-side reasoning.
+    const github_url = githubUrls.get(key) ?? local_github_url;
     const version =
       locations.find((l) => l.resolved_version)?.resolved_version ??
       locations[0]?.version_constraint;

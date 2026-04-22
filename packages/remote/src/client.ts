@@ -92,7 +92,14 @@ export class ToolCairnClient {
    * Caller (scan-project) uses the unmatched results to classify tools as
    * `source: "non_oss"` and still returns a valid scan.
    */
-  async batchResolve(items: Array<{ name: string; ecosystem: Ecosystem }>): Promise<{
+  async batchResolve(
+    items: Array<{
+      name: string;
+      ecosystem: Ecosystem;
+      canonical_package_name?: string;
+      github_url?: string;
+    }>,
+  ): Promise<{
     results: Array<{
       input: { name: string; ecosystem: Ecosystem };
       matched: boolean;

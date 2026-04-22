@@ -14,6 +14,18 @@ export interface DetectedTool {
   manifest_file: string;
   /** Workspace path this dep belongs to, relative to project_root. "" for root. */
   workspace_path: string;
+  /**
+   * Canonical package name from the INSTALLED package's own manifest. Set by
+   * per-ecosystem resolvers after parsing; only differs from `name` when the
+   * dep key aliases the underlying package (e.g. npm `"x": "npm:real@1"`).
+   */
+  canonical_package_name?: string;
+  /**
+   * Repository URL extracted from the installed package's manifest — the
+   * authoritative disambiguator when registry-key lookups miss. Normalised
+   * to https://github.com/owner/repo (no git+ prefix, no .git suffix).
+   */
+  github_url?: string;
 }
 
 /** Return shape of every ecosystem parser. */
