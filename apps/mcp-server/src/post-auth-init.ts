@@ -235,12 +235,16 @@ interface AutoSubmitOutcome {
  */
 async function submitUnknownsToEngine(
   remote: ToolCairnClient,
-  pending: ReadonlyArray<{ name: string; github_url?: string }>,
+  pending: ReadonlyArray<{ name: string; github_url?: string; ecosystem?: string }>,
 ): Promise<AutoSubmitOutcome> {
   const res = await remote.suggestGraphUpdate({
     suggestion_type: 'new_tool',
     data: {
-      tools: pending.map((t) => ({ tool_name: t.name, github_url: t.github_url })),
+      tools: pending.map((t) => ({
+        tool_name: t.name,
+        github_url: t.github_url,
+        ecosystem: t.ecosystem,
+      })),
     },
     confidence: 0.5,
   });

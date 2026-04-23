@@ -93,14 +93,16 @@ export const suggestGraphUpdateSchema = {
           tool_name: z.string().min(1),
           github_url: z.string().url().optional(),
           description: z.string().optional(),
+          ecosystem: z.string().min(1).optional(),
         }),
       )
       .min(1)
       .max(200)
       .optional()
       .describe(
-        'Batch of tools to stage for admin review. Use with suggestion_type="new_tool". Overrides single-tool fields when present.',
+        'Batch of tools to stage for admin review. Use with suggestion_type="new_tool". Each entry may include `ecosystem` (npm/pypi/cargo/…) so the engine can cross-check the authoritative github_url from the package registry. Overrides single-tool fields when present.',
       ),
+    ecosystem: z.string().min(1).optional(),
     relationship: z
       .object({
         source_tool: z.string(),
