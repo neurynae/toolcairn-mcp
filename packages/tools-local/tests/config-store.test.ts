@@ -30,8 +30,9 @@ describe('config-store.mutateConfig', () => {
       { action: 'init', tool: '__project__', reason: 'fresh' },
     );
     expect(result.bootstrapped).toBe(true);
-    expect(result.config.version).toBe('1.1');
+    expect(result.config.version).toBe('1.2');
     expect(result.config.project.name).toBe('alpha');
+    expect(result.config.tools.unknown_in_graph).toEqual([]);
 
     // Audit entry written to jsonl
     const entries = await readLiveAudit(projectRoot);
@@ -183,8 +184,10 @@ describe('config-store.mutateConfig (v1.0 → v1.1 migration)', () => {
     );
 
     expect(result.migrated).toBe(true);
-    expect(result.config.version).toBe('1.1');
+    expect(result.config.version).toBe('1.2');
     expect(result.config.project.name).toBe('legacy-updated');
+    // v1.0 → v1.1 → v1.2 cascade must populate the new unknown_in_graph field.
+    expect(result.config.tools.unknown_in_graph).toEqual([]);
     expect(result.config.project.languages?.[0]?.name).toBe('TypeScript');
     expect(result.config.project.frameworks?.[0]?.name).toBe('Next.js');
 
@@ -200,7 +203,7 @@ describe('config-store.mutateConfig (v1.0 → v1.1 migration)', () => {
     // Disk doc should no longer carry `audit_log[]`
     const onDisk = JSON.parse(await readFile(configPath, 'utf-8'));
     expect(onDisk.audit_log).toBeUndefined();
-    expect(onDisk.version).toBe('1.1');
+    expect(onDisk.version).toBe('1.2');
   });
 });
 

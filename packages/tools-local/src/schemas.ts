@@ -81,9 +81,26 @@ export const checkCompatibilitySchema = {
 export const suggestGraphUpdateSchema = {
   suggestion_type: z.enum(['new_tool', 'new_edge', 'update_health', 'new_use_case']),
   data: z.object({
+    // Single-tool shape (backward compatible)
     tool_name: z.string().optional(),
     github_url: z.string().url().optional(),
     description: z.string().optional(),
+    // Batch shape for suggestion_type="new_tool" — preferred when draining
+    // `unknown_tools[]` from toolcairn_init / read_project_config.
+    tools: z
+      .array(
+        z.object({
+          tool_name: z.string().min(1),
+          github_url: z.string().url().optional(),
+          description: z.string().optional(),
+        }),
+      )
+      .min(1)
+      .max(200)
+      .optional()
+      .describe(
+        'Batch of tools to stage for admin review. Use with suggestion_type="new_tool". Overrides single-tool fields when present.',
+      ),
     relationship: z
       .object({
         source_tool: z.string(),
@@ -134,8 +151,18 @@ export const readProjectConfigSchema = {
 
 export const updateProjectConfigSchema = {
   project_root: z.string().min(1),
-  action: z.enum(['add_tool', 'remove_tool', 'update_tool', 'add_evaluation']),
-  tool_name: z.string().min(1),
+  action: z.enum([
+    'add_tool',
+    'remove_tool',
+    'update_tool',
+    'add_evaluation',
+    'mark_suggestions_sent',
+  ]),
+  /**
+   * Required for add_tool / remove_tool / update_tool / add_evaluation.
+   * Omit for mark_suggestions_sent (pass data.tool_names: string[] instead).
+   */
+  tool_name: z.string().min(1).optional(),
   data: z.record(z.string(), z.unknown()).optional(),
 };
 

@@ -24,6 +24,14 @@ export {
 export { handleReadProjectConfig } from './handlers/read-project-config.js';
 export { handleUpdateProjectConfig } from './handlers/update-project-config.js';
 
+// Auto-init pipeline — shared by handler + auth-time server wiring
+export {
+  autoInitProject,
+  type AutoInitInput,
+  type AutoInitResult,
+  type AutoInitScanSummary,
+} from './auto-init.js';
+
 // Discovery + config-store — exported for local E2E / direct embedding
 export * from './discovery/index.js';
 export {
@@ -34,6 +42,7 @@ export {
   bulkAppendAudit,
   readLiveAudit,
   migrateToV1_1,
+  migrateToV1_2,
   emptySkeleton,
   joinConfigPath,
   joinAuditPath,

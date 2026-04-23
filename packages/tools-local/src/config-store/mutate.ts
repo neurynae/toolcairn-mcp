@@ -4,7 +4,7 @@ import type { ConfigAuditEntry, ToolPilotProjectConfig } from '@toolcairn/types'
 import lockfile from 'proper-lockfile';
 import { fileExists } from '../discovery/util/fs.js';
 import { appendAudit } from './audit.js';
-import { migrateToV1_1 } from './migrate.js';
+import { migrateToV1_1, migrateToV1_2 } from './migrate.js';
 import { joinConfigDir, joinConfigPath } from './paths.js';
 import { readConfig } from './read.js';
 import { emptySkeleton } from './skeleton.js';
@@ -76,7 +76,7 @@ export async function mutateConfig(
       config = existing;
     }
 
-    // 2. Migrate if needed (before mutator so mutators see the v1.1 shape).
+    // 2. Migrate if needed (before mutator so mutators see the v1.2 shape).
     if (config.version === '1.0') {
       const result = await migrateToV1_1(config, projectRoot);
       migrated = result.migrated;
@@ -90,6 +90,15 @@ export async function mutateConfig(
       if (!config.project.subprojects) config.project.subprojects = [];
     }
 
+    // 2b. Step up to v1.2 if still on v1.1 — additive (unknown_in_graph: []).
+    if (config.version === '1.1') {
+      const result = await migrateToV1_2(config, projectRoot);
+      migrated = migrated || result.migrated;
+    } else if (!config.tools.unknown_in_graph) {
+      // Hand-edit guard: v1.2 file missing the new field
+      config.tools.unknown_in_graph = [];
+    }
+
     // 3. Caller mutation.
     await mutator(config);
 
@@ -97,7 +106,7 @@ export async function mutateConfig(
     const now = new Date().toISOString();
     const entry: ConfigAuditEntry = { ...audit, timestamp: now };
     config.last_audit_entry = entry;
-    config.version = '1.1';
+    config.version = '1.2';
 
     // 5. Atomic write + audit append.
     await writeConfig(projectRoot, config);

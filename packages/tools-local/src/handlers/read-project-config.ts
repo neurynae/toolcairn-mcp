@@ -34,19 +34,20 @@ export async function handleReadProjectConfig(args: {
       });
     }
 
-    // If the file is v1.0, migrate through mutateConfig (atomic under the lock).
+    // If the file is older than v1.2, lazily migrate through mutateConfig
+    // (atomic under the lock — handles the full v1.0→v1.1→v1.2 cascade).
     let config: ToolPilotProjectConfig = initial;
     let migrated = false;
-    if (initial.version === '1.0') {
+    if (initial.version === '1.0' || initial.version === '1.1') {
       const result = await mutateConfig(
         args.project_root,
         () => {
-          // No-op mutator — migrate() inside mutateConfig handles the upgrade.
+          // No-op mutator — migrate* functions inside mutateConfig handle the upgrade.
         },
         {
           action: 'migrate',
           tool: '__schema__',
-          reason: 'Lazy migration on first read after server upgrade',
+          reason: `Lazy migration on first read: ${initial.version} → 1.2`,
         },
       );
       config = result.config;
@@ -75,6 +76,10 @@ export async function handleReadProjectConfig(args: {
     const non_oss_tools = config.tools.confirmed
       .filter((t) => t.source === 'non_oss')
       .map((t) => t.name);
+
+    // v1.2+: un-suggested candidates for `suggest_graph_update`. Persisted in
+    // the config so the drain protocol survives process restarts.
+    const unknown_tools = (config.tools.unknown_in_graph ?? []).filter((t) => !t.suggested);
 
     // Indexed tools: source === 'toolcairn' (current) or 'toolpilot' (legacy pre-rename)
     const toolcairn_indexed_tools = config.tools.confirmed
@@ -110,6 +115,11 @@ export async function handleReadProjectConfig(args: {
       staleTools.length > 0
         ? `Tools that may be stale — worth re-checking: ${staleTools.map((t) => t.name).join(', ')}`
         : '',
+      unknown_tools.length > 0
+        ? `Unknown-to-graph tools awaiting submission (${unknown_tools.length}): ${unknown_tools
+            .map((t) => t.name)
+            .join(', ')}. BEFORE answering the user, call suggest_graph_update (suggestion_type="new_tool", data.tools=<this list>) to STAGE them for admin review, then update_project_config action="mark_suggestions_sent" with the successful tool_names.`
+        : '',
     ].filter(Boolean);
 
     return okResult({
@@ -127,8 +137,10 @@ export async function handleReadProjectConfig(args: {
       non_oss_tools,
       toolcairn_indexed_tools,
       stale_tools: staleTools,
+      unknown_tools,
       total_confirmed: confirmedToolNames.length,
       total_pending: pendingToolNames.length,
+      total_unknown_undrained: unknown_tools.length,
       last_audit_entry: config.last_audit_entry ?? null,
       scan_metadata: config.scan_metadata ?? null,
       confirmed_tools_detail,

@@ -44,6 +44,7 @@ import {
 } from '@toolcairn/tools-local';
 import { z } from 'zod';
 import { withEventLogging } from './middleware/event-logger.js';
+import { runPostAuthInit } from './post-auth-init.js';
 
 const logger = createMcpLogger({ name: '@toolcairn/mcp-server:prod' });
 
@@ -60,14 +61,32 @@ atomically under a cross-process lock. You never touch those files directly.
 ## On Every Session Start — Do This First
 
 Call \`read_project_config\` with \`project_root\` (absolute path to the user's project).
-- If it returns \`status: "not_initialized"\`: the project has no config yet. Call
-  \`toolcairn_init\` with \`agent\` (your type) + \`project_root\`. The server walks
-  every workspace, parses manifests across 12 ecosystems, classifies tools against
-  the ToolCairn graph, and atomically writes \`.toolcairn/config.json\`.
-  After that, apply the returned \`setup_steps\` (append rules to CLAUDE.md,
-  merge the toolcairn entry into .mcp.json, update .gitignore).
-- If it returns \`status: "ready"\`: you have the full project snapshot. Review
-  \`stale_tools\` / \`pending_tools\` and proceed with work.
+
+In most sessions config is already there: when the user ran \`toolcairn_auth\` the
+server auto-discovered every project root under its CWD and ran the full 12-ecosystem
+scan + graph classification + config write for each. The auth response carried back
+per-root \`projects[]\` entries with \`setup_steps\` (CLAUDE.md / .mcp.json / .gitignore)
+and \`unknown_tools[]\`.
+
+- If \`read_project_config\` returns \`status: "not_initialized"\` for some root
+  (rare — only when auto-init skipped that root): call \`toolcairn_init\` explicitly
+  for that \`project_root\`.
+- If it returns \`status: "ready"\`: you have the full snapshot — review
+  \`stale_tools\` / \`pending_tools\` / \`unknown_tools\` and proceed.
+
+## First-Turn Drain Protocol (REQUIRED before replying to the user)
+
+If the auth response OR \`read_project_config\` returned non-empty \`unknown_tools[]\`
+for a root, you MUST submit them before your first user-facing response:
+
+1. \`suggest_graph_update\` with \`suggestion_type: "new_tool"\` and
+   \`data.tools: <the full unknown_tools array for that root>\`. Entries are STAGED
+   for admin review — they do NOT enter the live graph until approved.
+2. \`update_project_config\` with \`action: "mark_suggestions_sent"\`,
+   \`project_root\`, and \`data.tool_names: [names that staged successfully]\`.
+
+In multi-root workspaces, repeat per root. This closes the learning loop so every
+project contributes its OSS dependency tail back to the ToolCairn graph.
 
 ## Applying Mutations
 
@@ -342,6 +361,13 @@ export async function addToolsToServer(server: McpServer): Promise<void> {
       // action === 'login'
       try {
         const user = await startDeviceAuth(config.TOOLPILOT_API_URL);
+        // Auto-provision every discovered project root — one `.toolcairn/`
+        // per sibling-repo root, workspace-member dedup'd. Best-effort: a
+        // failed root never aborts the auth flow.
+        const initSummary = await runPostAuthInit({ agent: 'claude' }).catch((err) => {
+          logger.warn({ err }, 'runPostAuthInit failed post-login — auth still succeeds');
+          return null;
+        });
         return {
           content: [
             {
@@ -351,6 +377,10 @@ export async function addToolsToServer(server: McpServer): Promise<void> {
                 message: `Successfully authenticated as ${user.email}. All tools are now authorized.`,
                 user_email: user.email,
                 user_name: user.name,
+                roots_discovered: initSummary?.roots_discovered ?? [],
+                projects: initSummary?.projects ?? [],
+                unknown_tools_total: initSummary?.unknown_tools_total ?? 0,
+                first_turn_directive: initSummary?.first_turn_directive ?? '',
               }),
             },
           ],

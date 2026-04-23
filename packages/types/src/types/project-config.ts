@@ -87,8 +87,36 @@ export interface PendingTool {
   added_at: string;
 }
 
+/**
+ * A tool discovered in the project whose (ecosystem, name) was NOT matched in
+ * the ToolCairn graph by batch-resolve. Persisted across sessions so the agent
+ * can drain the list via `suggest_graph_update` even after process restarts.
+ */
+export interface UnknownInGraphTool {
+  /** Tool name as declared in the manifest. */
+  name: string;
+  ecosystem: Ecosystem;
+  /** Canonical package name pulled from the installed manifest, when available. */
+  canonical_package_name?: string;
+  /** GitHub URL from the installed manifest — enables engine-side indexer enqueue. */
+  github_url?: string;
+  /** ISO timestamp when this entry was added to the list. */
+  discovered_at: string;
+  /** Flipped true once the agent successfully staged this tool via suggest_graph_update. */
+  suggested: boolean;
+  /** ISO timestamp of the successful suggest_graph_update call. */
+  suggested_at?: string;
+}
+
 export interface ConfigAuditEntry {
-  action: 'add_tool' | 'remove_tool' | 'update_tool' | 'add_evaluation' | 'init' | 'migrate';
+  action:
+    | 'add_tool'
+    | 'remove_tool'
+    | 'update_tool'
+    | 'add_evaluation'
+    | 'init'
+    | 'migrate'
+    | 'mark_suggestions_sent';
   tool: string;
   /** ISO timestamp. */
   timestamp: string;
@@ -146,17 +174,22 @@ export interface DiscoveryWarning {
  * v1.0 (legacy): agent-authored; had `project.language` string, `project.framework?` string,
  * and inline `audit_log: []`. Still accepted on read and migrated to v1.1 on first write.
  *
- * v1.1 (current): server-authored; multi-language/framework via arrays, per-tool `locations[]`,
- * audit log relocated to `.toolcairn/audit-log.jsonl`. Only `last_audit_entry` summary lives here.
+ * v1.1: server-authored; multi-language/framework via arrays, per-tool `locations[]`,
+ * audit log relocated to `.toolcairn/audit-log.jsonl`.
+ *
+ * v1.2 (current): adds `tools.unknown_in_graph[]` — tools discovered during scanning
+ * that the ToolCairn graph does not yet know about. Agent drains these via
+ * `suggest_graph_update` (staging for admin review) and marks them with
+ * `update_project_config action='mark_suggestions_sent'`.
  */
 export interface ToolPilotProjectConfig {
-  /** Config schema version. Reader supports 1.0 and 1.1; writer always emits 1.1. */
-  version: '1.0' | '1.1';
+  /** Config schema version. Reader supports 1.0/1.1/1.2; writer always emits 1.2. */
+  version: '1.0' | '1.1' | '1.2';
   project: {
     name: string;
-    /** v1.0 legacy, preserved on read for migration; v1.1 writer omits in favour of `languages`. */
+    /** v1.0 legacy, preserved on read for migration; v1.1+ writer omits in favour of `languages`. */
     language?: string;
-    /** v1.0 legacy; v1.1 writer uses `frameworks`. */
+    /** v1.0 legacy; v1.1+ writer uses `frameworks`. */
     framework?: string;
     /** v1.1+: all languages detected across the tree, ordered by file count. */
     languages?: ProjectLanguage[];
@@ -168,9 +201,15 @@ export interface ToolPilotProjectConfig {
   tools: {
     confirmed: ConfirmedTool[];
     pending_evaluation: PendingTool[];
+    /**
+     * v1.2+: tools scanned from the project that were not matched by the engine's
+     * batch-resolve — candidates for the agent to submit via `suggest_graph_update`.
+     * Entries flip `suggested: true` after a successful staging call.
+     */
+    unknown_in_graph?: UnknownInGraphTool[];
   };
   /**
-   * v1.0 only — chronological log of all config mutations. v1.1 migrates this array into
+   * v1.0 only — chronological log of all config mutations. v1.1+ migrates this array into
    * `.toolcairn/audit-log.jsonl` and removes it from the config doc.
    */
   audit_log?: ConfigAuditEntry[];

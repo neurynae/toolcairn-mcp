@@ -13,6 +13,6 @@ export {
 export { readConfig, type ReadConfigResult } from './read.js';
 export { writeConfig } from './write.js';
 export { appendAudit, bulkAppendAudit, readLiveAudit } from './audit.js';
-export { migrateToV1_1, type MigrateResult } from './migrate.js';
+export { migrateToV1_1, migrateToV1_2, type MigrateResult } from './migrate.js';
 export { mutateConfig, type Mutator, type MutateResult, type PendingAuditEntry } from './mutate.js';
 export { emptySkeleton } from './skeleton.js';

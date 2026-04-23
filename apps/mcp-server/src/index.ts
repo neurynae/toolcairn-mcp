@@ -8,6 +8,7 @@ import { createMcpLogger } from '@toolcairn/errors';
 import { isTokenValid, loadCredentials, startDeviceAuth } from '@toolcairn/remote';
 import { z } from 'zod';
 import { ensureProjectSetup } from './project-setup.js';
+import { runPostAuthInit } from './post-auth-init.js';
 import { buildProdServer } from './server.prod.js';
 import { createTransport } from './transport.js';
 
@@ -52,8 +53,19 @@ You are NOT authenticated. ToolCairn tools are unavailable until you sign in.
 Call: \`toolcairn_auth\` with \`{ "action": "login" }\`
 
 This opens a browser window. The user signs in at toolcairn.neurynae.com/device,
-confirms the code, and the token is saved. After that, tell the user to restart
-their agent — all 14 tools will be available on the next session.
+confirms the code, and the token is saved.
+
+After the token is saved the server auto-provisions every project root under the
+working directory: it creates \`.toolcairn/config.json\` + audit-log for each root,
+runs the 12-ecosystem scan, and classifies tools against the ToolCairn graph. The
+login response carries back \`projects[]\` (per-root scan summaries + setup_steps
+for CLAUDE.md / .mcp.json / .gitignore) plus \`unknown_tools_total\` and a
+\`first_turn_directive\` describing any tools that must be drained via
+\`suggest_graph_update\` (batch) before the first user reply.
+
+Tell the user to restart their agent — all 14 tools will be available on the
+next session and the agent should immediately execute the first_turn_directive
+before replying.
       `.trim(),
     },
   );
@@ -86,6 +98,13 @@ their agent — all 14 tools will be available on the next session.
 
       try {
         const user = await startDeviceAuth(config.TOOLPILOT_API_URL);
+        // Provision every project root under CWD so the user can ask the
+        // restarted agent for work immediately — no round-trip to the
+        // `toolcairn_init` tool required.
+        const initSummary = await runPostAuthInit({ agent: 'claude' }).catch((err) => {
+          logger.warn({ err }, 'runPostAuthInit failed post-login — auth still succeeds');
+          return null;
+        });
         return {
           content: [
             {
@@ -94,6 +113,10 @@ their agent — all 14 tools will be available on the next session.
                 ok: true,
                 message: `Signed in as ${user.email}. Please restart your agent — all ToolCairn tools will be available on the next session.`,
                 user_email: user.email,
+                roots_discovered: initSummary?.roots_discovered ?? [],
+                projects: initSummary?.projects ?? [],
+                unknown_tools_total: initSummary?.unknown_tools_total ?? 0,
+                first_turn_directive: initSummary?.first_turn_directive ?? '',
               }),
             },
           ],
@@ -122,7 +145,15 @@ async function main(): Promise<void> {
   const authenticated = creds !== null && isTokenValid(creds);
 
   if (authenticated) {
-    // Fully authenticated — register all tools
+    // Fully authenticated — provision any discovered project root missing
+    // `.toolcairn/config.json` before registering tools, so the agent sees
+    // `status: "ready"` on its first `read_project_config` call. Already-ready
+    // roots are skipped (onlyMissingConfig).
+    try {
+      await runPostAuthInit({ agent: 'claude', onlyMissingConfig: true });
+    } catch (err) {
+      logger.warn({ err }, 'Startup auto-init failed — continuing with tool registration');
+    }
     server = await buildProdServer();
   } else {
     // Not authenticated — connect immediately with auth-gate server.

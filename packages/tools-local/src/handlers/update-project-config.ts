@@ -5,12 +5,18 @@ import { errResult, okResult } from '../utils.js';
 
 const logger = createMcpLogger({ name: '@toolcairn/tools:update-project-config' });
 
-type UpdateAction = 'add_tool' | 'remove_tool' | 'update_tool' | 'add_evaluation';
+type UpdateAction =
+  | 'add_tool'
+  | 'remove_tool'
+  | 'update_tool'
+  | 'add_evaluation'
+  | 'mark_suggestions_sent';
 
 export async function handleUpdateProjectConfig(args: {
   project_root: string;
   action: UpdateAction;
-  tool_name: string;
+  /** Required for every action EXCEPT mark_suggestions_sent (uses data.tool_names[]). */
+  tool_name?: string;
   data?: Record<string, unknown>;
 }) {
   try {
@@ -21,12 +27,36 @@ export async function handleUpdateProjectConfig(args: {
 
     const data = args.data ?? {};
 
+    // mark_suggestions_sent uses data.tool_names[] (batch), everything else is per-tool.
+    const isBatchMark = args.action === 'mark_suggestions_sent';
+    const toolNames: string[] = isBatchMark
+      ? Array.isArray(data.tool_names)
+        ? (data.tool_names as unknown[]).filter((t): t is string => typeof t === 'string')
+        : []
+      : [];
+
+    if (!isBatchMark && !args.tool_name) {
+      return errResult(
+        'missing_field',
+        `tool_name is required for action "${args.action}"`,
+      );
+    }
+    if (isBatchMark && toolNames.length === 0) {
+      return errResult(
+        'missing_field',
+        'mark_suggestions_sent requires data.tool_names: string[] with at least one entry',
+      );
+    }
+
     let notFound = false;
+    let markedCount = 0;
     const now = new Date().toISOString();
 
     const audit: PendingAuditEntry = {
       action: args.action,
-      tool: args.tool_name,
+      tool: isBatchMark
+        ? `__batch__:${toolNames.length}`
+        : (args.tool_name as string),
       reason:
         (data.reason as string | undefined) ??
         (data.chosen_reason as string | undefined) ??
@@ -38,12 +68,13 @@ export async function handleUpdateProjectConfig(args: {
       (cfg) => {
         switch (args.action) {
           case 'add_tool': {
+            const toolName = args.tool_name as string;
             cfg.tools.pending_evaluation = cfg.tools.pending_evaluation.filter(
-              (t) => t.name !== args.tool_name,
+              (t) => t.name !== toolName,
             );
-            if (!cfg.tools.confirmed.some((t) => t.name === args.tool_name)) {
+            if (!cfg.tools.confirmed.some((t) => t.name === toolName)) {
               const tool: ConfirmedTool = {
-                name: args.tool_name,
+                name: toolName,
                 source: (data.source as ToolSource) ?? 'toolcairn',
                 github_url: data.github_url as string | undefined,
                 version: data.version as string | undefined,
@@ -59,14 +90,16 @@ export async function handleUpdateProjectConfig(args: {
             break;
           }
           case 'remove_tool': {
-            cfg.tools.confirmed = cfg.tools.confirmed.filter((t) => t.name !== args.tool_name);
+            const toolName = args.tool_name as string;
+            cfg.tools.confirmed = cfg.tools.confirmed.filter((t) => t.name !== toolName);
             cfg.tools.pending_evaluation = cfg.tools.pending_evaluation.filter(
-              (t) => t.name !== args.tool_name,
+              (t) => t.name !== toolName,
             );
             break;
           }
           case 'update_tool': {
-            const idx = cfg.tools.confirmed.findIndex((t) => t.name === args.tool_name);
+            const toolName = args.tool_name as string;
+            const idx = cfg.tools.confirmed.findIndex((t) => t.name === toolName);
             if (idx === -1) {
               notFound = true;
               return;
@@ -91,16 +124,30 @@ export async function handleUpdateProjectConfig(args: {
             break;
           }
           case 'add_evaluation': {
-            const inConfirmed = cfg.tools.confirmed.some((t) => t.name === args.tool_name);
-            const inPending = cfg.tools.pending_evaluation.some((t) => t.name === args.tool_name);
+            const toolName = args.tool_name as string;
+            const inConfirmed = cfg.tools.confirmed.some((t) => t.name === toolName);
+            const inPending = cfg.tools.pending_evaluation.some((t) => t.name === toolName);
             if (!inConfirmed && !inPending) {
               const pending: PendingTool = {
-                name: args.tool_name,
+                name: toolName,
                 category: (data.category as string) ?? 'other',
                 added_at: now,
               };
               cfg.tools.pending_evaluation.push(pending);
             }
+            break;
+          }
+          case 'mark_suggestions_sent': {
+            const list = cfg.tools.unknown_in_graph ?? [];
+            const wanted = new Set(toolNames);
+            for (const entry of list) {
+              if (wanted.has(entry.name) && !entry.suggested) {
+                entry.suggested = true;
+                entry.suggested_at = now;
+                markedCount++;
+              }
+            }
+            cfg.tools.unknown_in_graph = list;
             break;
           }
         }
@@ -118,6 +165,11 @@ export async function handleUpdateProjectConfig(args: {
     return okResult({
       action_applied: args.action,
       tool_name: args.tool_name,
+      tool_names: isBatchMark ? toolNames : undefined,
+      marked_count: isBatchMark ? markedCount : undefined,
+      undrained_unknown_count: (config.tools.unknown_in_graph ?? []).filter(
+        (t) => !t.suggested,
+      ).length,
       confirmed_count: config.tools.confirmed.length,
       pending_count: config.tools.pending_evaluation.length,
       last_audit_entry: audit_entry,
@@ -141,5 +193,7 @@ function defaultReasonFor(action: UpdateAction): string {
       return 'Tool details updated';
     case 'add_evaluation':
       return 'Added for evaluation';
+    case 'mark_suggestions_sent':
+      return 'Agent successfully staged unknown tools via suggest_graph_update';
   }
 }
