@@ -11,13 +11,25 @@
  * or more roots are missing `.toolcairn/config.json`, we provision them inline
  * before `addToolsToServer()` so the agent sees fully-ready projects on the
  * first `read_project_config` call.
+ *
+ * Safety-net auto-push (v0.10.4+): after each root's scan+write completes,
+ * we push its `unknown_tools[]` to the engine's `suggest_graph_update`
+ * endpoint directly. This guarantees the OSS tail gets submitted for admin
+ * review even if the agent skips the first-turn directive. The engine
+ * dedups against existing staged + already-indexed rows, so overlapping
+ * submissions from the agent are safe — no double-staging.
  */
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { config as mcpConfig } from '@toolcairn/config';
 import { createMcpLogger } from '@toolcairn/errors';
 import { ToolCairnClient, loadCredentials } from '@toolcairn/remote';
-import { type AutoInitResult, autoInitProject, discoverProjectRoots } from '@toolcairn/tools-local';
+import {
+  type AutoInitResult,
+  autoInitProject,
+  discoverProjectRoots,
+  mutateConfig,
+} from '@toolcairn/tools-local';
 
 const logger = createMcpLogger({ name: '@toolcairn/mcp-server:post-auth-init' });
 
@@ -31,6 +43,13 @@ export interface PerRootOutcome {
   unknown_tools?: AutoInitResult['unknown_tools'];
   bootstrapped?: boolean;
   migrated?: boolean;
+  /** Populated by the safety-net auto-push when non-zero tools were submitted. */
+  auto_submitted?: {
+    staged: string[];
+    already_staged: string[];
+    already_indexed: string[];
+    rejected: Array<{ tool_name: string; reason: string }>;
+  };
   error?: string;
 }
 
@@ -70,6 +89,8 @@ export interface RunPostAuthInitOptions {
    * the scan.
    */
   onlyMissingConfig?: boolean;
+  /** Disable the safety-net auto-push (tests). Default false — auto-push is on. */
+  disableAutoSubmit?: boolean;
 }
 
 /**
@@ -143,7 +164,52 @@ export async function runPostAuthInit(
     }
   }
 
-  const unknownTotal = projects.reduce((sum, p) => sum + (p.unknown_tools?.length ?? 0), 0);
+  // Safety-net: push each root's unknown_tools to suggest_graph_update even
+  // if the agent never calls the tool. Engine dedups against stagedNode +
+  // indexedTool, so concurrent agent calls are safe. Runs in sequence per
+  // root; if the engine is unreachable the flag stays unsuggested and the
+  // next startup retries.
+  if (!options.disableAutoSubmit) {
+    for (const project of projects) {
+      if (project.status !== 'initialized') continue;
+      const pending = (project.unknown_tools ?? []).filter((t) => !!t.github_url);
+      if (pending.length === 0) continue;
+
+      try {
+        const outcome = await submitUnknownsToEngine(remote, pending);
+        project.auto_submitted = outcome;
+        const toMark = [...outcome.staged, ...outcome.already_staged, ...outcome.already_indexed];
+        if (toMark.length > 0) {
+          await markSuggestedInConfig(project.project_root, toMark).catch((err) =>
+            logger.warn(
+              { err, projectRoot: project.project_root },
+              'Failed to flip suggested flags after auto-submit',
+            ),
+          );
+        }
+        logger.info(
+          {
+            projectRoot: project.project_root,
+            staged: outcome.staged.length,
+            already_staged: outcome.already_staged.length,
+            already_indexed: outcome.already_indexed.length,
+            rejected: outcome.rejected.length,
+          },
+          'Auto-push to suggest_graph_update complete',
+        );
+      } catch (err) {
+        logger.warn(
+          { err, projectRoot: project.project_root },
+          'Auto-push to suggest_graph_update failed — agent directive remains as fallback',
+        );
+      }
+    }
+  }
+
+  const unknownTotal = projects.reduce(
+    (sum, p) => sum + (p.unknown_tools ?? []).filter((t) => !t.suggested).length,
+    0,
+  );
   const directive = buildFirstTurnDirective(projects, unknownTotal);
 
   return {
@@ -156,18 +222,126 @@ export async function runPostAuthInit(
   };
 }
 
+interface AutoSubmitOutcome {
+  staged: string[];
+  already_staged: string[];
+  already_indexed: string[];
+  rejected: Array<{ tool_name: string; reason: string }>;
+}
+
+/**
+ * POST the whole unknown_tools list for one root to /v1/feedback/suggest.
+ * Parses the CallToolResult envelope and bucket-sorts per-item results.
+ */
+async function submitUnknownsToEngine(
+  remote: ToolCairnClient,
+  pending: ReadonlyArray<{ name: string; github_url?: string }>,
+): Promise<AutoSubmitOutcome> {
+  const res = await remote.suggestGraphUpdate({
+    suggestion_type: 'new_tool',
+    data: {
+      tools: pending.map((t) => ({ tool_name: t.name, github_url: t.github_url })),
+    },
+    confidence: 0.5,
+  });
+
+  const textBlock = res.content?.[0];
+  const outcome: AutoSubmitOutcome = {
+    staged: [],
+    already_staged: [],
+    already_indexed: [],
+    rejected: [],
+  };
+  if (!textBlock || textBlock.type !== 'text') return outcome;
+
+  let envelope: {
+    ok?: boolean;
+    data?: {
+      results?: Array<{
+        tool_name?: string;
+        verified?: boolean;
+        staged?: boolean;
+        already_staged?: boolean;
+        already_indexed?: boolean;
+        reason?: string;
+      }>;
+    };
+  };
+  try {
+    envelope = JSON.parse(textBlock.text ?? '{}');
+  } catch {
+    return outcome;
+  }
+  const items = envelope.data?.results ?? [];
+  for (const item of items) {
+    const name = item.tool_name ?? '';
+    if (!name) continue;
+    if (item.already_indexed) {
+      outcome.already_indexed.push(name);
+    } else if (item.already_staged) {
+      outcome.already_staged.push(name);
+    } else if (item.staged === true) {
+      outcome.staged.push(name);
+    } else {
+      outcome.rejected.push({ tool_name: name, reason: item.reason ?? 'unknown' });
+    }
+  }
+  return outcome;
+}
+
+/**
+ * Flip `suggested: true` + `suggested_at` for the given tool names under the
+ * atomic config lock. Only writes when at least one matching entry changes,
+ * so repeated runs don't churn the audit log.
+ */
+async function markSuggestedInConfig(
+  projectRoot: string,
+  toolNames: ReadonlyArray<string>,
+): Promise<void> {
+  const wanted = new Set(toolNames);
+  const now = new Date().toISOString();
+  let changed = 0;
+
+  await mutateConfig(
+    projectRoot,
+    (cfg) => {
+      const list = cfg.tools.unknown_in_graph ?? [];
+      for (const entry of list) {
+        if (wanted.has(entry.name) && !entry.suggested) {
+          entry.suggested = true;
+          entry.suggested_at = now;
+          changed++;
+        }
+      }
+      cfg.tools.unknown_in_graph = list;
+    },
+    {
+      action: 'mark_suggestions_sent',
+      tool: `__auto_submit__:${toolNames.length}`,
+      reason: 'Server auto-pushed unknown_in_graph tools to suggest_graph_update',
+    },
+  );
+
+  if (changed === 0) {
+    logger.debug({ projectRoot, toolNames }, 'No unknown_in_graph entries flipped');
+  }
+}
+
 function buildFirstTurnDirective(projects: PerRootOutcome[], unknownTotal: number): string {
   if (unknownTotal === 0) return '';
-  const rootsWithUnknown = projects.filter((p) => (p.unknown_tools?.length ?? 0) > 0);
+  const rootsWithUnknown = projects.filter(
+    (p) => (p.unknown_tools ?? []).filter((t) => !t.suggested).length > 0,
+  );
+  if (rootsWithUnknown.length === 0) return '';
   const roots = rootsWithUnknown.map((p) => p.project_root).join(', ');
   return [
     `The auto-init scan found ${unknownTotal} tool(s) not yet in the ToolCairn graph`,
     `across ${rootsWithUnknown.length} project root(s): ${roots}.`,
-    'BEFORE responding to the user, for EACH root with a non-empty `unknown_tools[]`:',
+    'The server has already auto-submitted these to the admin review queue,',
+    'but you MAY repeat the call below to confirm — engine-side dedup prevents duplicates:',
     '(1) call `suggest_graph_update` with suggestion_type="new_tool" and',
-    "    data.tools=<that root's unknown_tools array> — entries will be STAGED",
-    '    for admin review (no live-graph writes yet);',
+    "    data.tools=<that root's unknown_tools array>;",
     '(2) call `update_project_config` with action="mark_suggestions_sent",',
-    '    project_root, and data.tool_names=<names that staged successfully>.',
+    '    project_root, and data.tool_names=<names that staged or were already_staged>.',
   ].join(' ');
 }
