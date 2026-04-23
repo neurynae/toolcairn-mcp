@@ -118,7 +118,9 @@ export async function handleReadProjectConfig(args: {
       unknown_tools.length > 0
         ? `Unknown-to-graph tools awaiting submission (${unknown_tools.length}): ${unknown_tools
             .map((t) => t.name)
-            .join(', ')}. BEFORE answering the user, call suggest_graph_update (suggestion_type="new_tool", data.tools=<this list>) to STAGE them for admin review, then update_project_config action="mark_suggestions_sent" with the successful tool_names.`
+            .join(
+              ', ',
+            )}. BEFORE answering the user, call suggest_graph_update (suggestion_type="new_tool", data.tools=<this list>) to STAGE them for admin review, then update_project_config action="mark_suggestions_sent" with the successful tool_names.`
         : '',
     ].filter(Boolean);
 

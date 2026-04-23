@@ -17,11 +17,7 @@ import { join } from 'node:path';
 import { config as mcpConfig } from '@toolcairn/config';
 import { createMcpLogger } from '@toolcairn/errors';
 import { ToolCairnClient, loadCredentials } from '@toolcairn/remote';
-import {
-  type AutoInitResult,
-  autoInitProject,
-  discoverProjectRoots,
-} from '@toolcairn/tools-local';
+import { type AutoInitResult, autoInitProject, discoverProjectRoots } from '@toolcairn/tools-local';
 
 const logger = createMcpLogger({ name: '@toolcairn/mcp-server:post-auth-init' });
 
@@ -121,7 +117,9 @@ export async function runPostAuthInit(
         projectRoot,
         agent,
         batchResolve: (items) => remote.batchResolve(items),
-        reason: options.onlyMissingConfig ? 'Startup auto-init (config missing)' : 'Post-auth auto-init',
+        reason: options.onlyMissingConfig
+          ? 'Startup auto-init (config missing)'
+          : 'Post-auth auto-init',
       });
       projects.push({
         project_root: projectRoot,
@@ -145,10 +143,7 @@ export async function runPostAuthInit(
     }
   }
 
-  const unknownTotal = projects.reduce(
-    (sum, p) => sum + (p.unknown_tools?.length ?? 0),
-    0,
-  );
+  const unknownTotal = projects.reduce((sum, p) => sum + (p.unknown_tools?.length ?? 0), 0);
   const directive = buildFirstTurnDirective(projects, unknownTotal);
 
   return {
@@ -161,10 +156,7 @@ export async function runPostAuthInit(
   };
 }
 
-function buildFirstTurnDirective(
-  projects: PerRootOutcome[],
-  unknownTotal: number,
-): string {
+function buildFirstTurnDirective(projects: PerRootOutcome[], unknownTotal: number): string {
   if (unknownTotal === 0) return '';
   const rootsWithUnknown = projects.filter((p) => (p.unknown_tools?.length ?? 0) > 0);
   const roots = rootsWithUnknown.map((p) => p.project_root).join(', ');
@@ -173,7 +165,7 @@ function buildFirstTurnDirective(
     `across ${rootsWithUnknown.length} project root(s): ${roots}.`,
     'BEFORE responding to the user, for EACH root with a non-empty `unknown_tools[]`:',
     '(1) call `suggest_graph_update` with suggestion_type="new_tool" and',
-    '    data.tools=<that root\'s unknown_tools array> — entries will be STAGED',
+    "    data.tools=<that root's unknown_tools array> — entries will be STAGED",
     '    for admin review (no live-graph writes yet);',
     '(2) call `update_project_config` with action="mark_suggestions_sent",',
     '    project_root, and data.tool_names=<names that staged successfully>.',

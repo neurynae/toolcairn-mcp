@@ -13,6 +13,7 @@
  * invocation of `npx toolcairn-mcp` covers any sibling-repo layout (e.g.
  * `D:\Workspace\{app,api,web}\` where the parent has no manifest of its own).
  */
+import type { Dirent } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createMcpLogger } from '@toolcairn/errors';
@@ -76,7 +77,9 @@ export async function discoverProjectRoots(
 
   // Shortest path first — ensures shallower candidates get to claim their
   // subtree via `discoverWorkspaces()` before deeper ones are considered.
-  candidates.sort((a, b) => a.split(/[\\/]/).length - b.split(/[\\/]/).length || a.localeCompare(b));
+  candidates.sort(
+    (a, b) => a.split(/[\\/]/).length - b.split(/[\\/]/).length || a.localeCompare(b),
+  );
 
   // 2. Dedup: ancestors claim workspace members.
   const surviving = new Set(candidates);
@@ -107,12 +110,14 @@ async function collectManifestDirs(root: string, maxDepth: number): Promise<stri
   const queue: Array<{ dir: string; depth: number }> = [{ dir: root, depth: 0 }];
 
   while (queue.length > 0) {
-    const { dir, depth } = queue.shift()!;
+    const head = queue.shift();
+    if (!head) break;
+    const { dir, depth } = head;
     if (depth > maxDepth) continue;
 
     if (await hasPrimaryManifest(dir)) hits.push(dir);
 
-    let entries;
+    let entries: Dirent[];
     try {
       entries = await readdir(dir, { withFileTypes: true });
     } catch {
@@ -141,7 +146,7 @@ async function hasPrimaryManifest(dir: string): Promise<boolean> {
   }
 
   // Extension match — readdir once, scan names.
-  let entries;
+  let entries: string[];
   try {
     entries = await readdir(dir);
   } catch {

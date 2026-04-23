@@ -36,10 +36,7 @@ export async function handleUpdateProjectConfig(args: {
       : [];
 
     if (!isBatchMark && !args.tool_name) {
-      return errResult(
-        'missing_field',
-        `tool_name is required for action "${args.action}"`,
-      );
+      return errResult('missing_field', `tool_name is required for action "${args.action}"`);
     }
     if (isBatchMark && toolNames.length === 0) {
       return errResult(
@@ -54,9 +51,7 @@ export async function handleUpdateProjectConfig(args: {
 
     const audit: PendingAuditEntry = {
       action: args.action,
-      tool: isBatchMark
-        ? `__batch__:${toolNames.length}`
-        : (args.tool_name as string),
+      tool: isBatchMark ? `__batch__:${toolNames.length}` : (args.tool_name as string),
       reason:
         (data.reason as string | undefined) ??
         (data.chosen_reason as string | undefined) ??
@@ -167,9 +162,8 @@ export async function handleUpdateProjectConfig(args: {
       tool_name: args.tool_name,
       tool_names: isBatchMark ? toolNames : undefined,
       marked_count: isBatchMark ? markedCount : undefined,
-      undrained_unknown_count: (config.tools.unknown_in_graph ?? []).filter(
-        (t) => !t.suggested,
-      ).length,
+      undrained_unknown_count: (config.tools.unknown_in_graph ?? []).filter((t) => !t.suggested)
+        .length,
       confirmed_count: config.tools.confirmed.length,
       pending_count: config.tools.pending_evaluation.length,
       last_audit_entry: audit_entry,

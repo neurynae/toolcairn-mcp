@@ -113,7 +113,8 @@ export async function migrateToV1_2(
     action: 'migrate',
     tool: '__schema__',
     timestamp: now,
-    reason: 'Schema 1.1 → 1.2: added tools.unknown_in_graph for suggest_graph_update drain tracking',
+    reason:
+      'Schema 1.1 → 1.2: added tools.unknown_in_graph for suggest_graph_update drain tracking',
   };
   config.last_audit_entry = entry;
   await appendAudit(projectRoot, entry);

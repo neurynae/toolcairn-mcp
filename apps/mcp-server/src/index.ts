@@ -7,8 +7,8 @@ import { config } from '@toolcairn/config';
 import { createMcpLogger } from '@toolcairn/errors';
 import { isTokenValid, loadCredentials, startDeviceAuth } from '@toolcairn/remote';
 import { z } from 'zod';
-import { ensureProjectSetup } from './project-setup.js';
 import { runPostAuthInit } from './post-auth-init.js';
+import { ensureProjectSetup } from './project-setup.js';
 import { buildProdServer } from './server.prod.js';
 import { createTransport } from './transport.js';
 

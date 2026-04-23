@@ -1,12 +1,19 @@
+import { rm } from 'node:fs/promises';
+import { join } from 'node:path';
 /**
  * End-to-end discovery smoke test against D:\ToolPilot — runs the v0.10
  * scanProject + mutateConfig flow directly using the built dist.
  *
  * Usage: node scripts/e2e-discovery.mjs <project_root>
  */
-import { scanProject, mutateConfig, readConfig, readLiveAudit, joinConfigPath, joinAuditPath } from '../packages/tools-local/dist/index.js';
-import { rm } from 'node:fs/promises';
-import { join } from 'node:path';
+import {
+  joinAuditPath,
+  joinConfigPath,
+  mutateConfig,
+  readConfig,
+  readLiveAudit,
+  scanProject,
+} from '../packages/tools-local/dist/index.js';
 
 const projectRoot = process.argv[2] || 'D:\\ToolPilot';
 const fresh = process.argv.includes('--fresh');
@@ -17,7 +24,9 @@ async function main() {
     await rm(toolcairnDir, { recursive: true, force: true }).catch(() => {});
     console.log(`(wiped ${toolcairnDir})\n`);
   } else {
-    console.log('(preserving existing .toolcairn/ — migration path will engage if config is v1.0)\n');
+    console.log(
+      '(preserving existing .toolcairn/ — migration path will engage if config is v1.0)\n',
+    );
   }
 
   console.log(`\n=== scanProject(${projectRoot}) ===`);
