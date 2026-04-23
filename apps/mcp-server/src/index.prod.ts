@@ -11,6 +11,14 @@
  *   → Poll in background; when confirmed: dynamically add all 14 tools
  *     to the running server (notifications/tools/list_changed sent to client)
  *   → No reconnect required
+ *
+ * Post-auth project provisioning (v0.10.2+):
+ * - When creds are already present at startup, run `runPostAuthInit` with
+ *   `onlyMissingConfig: true` so any project root under CWD that lacks
+ *   `.toolcairn/config.json` gets auto-provisioned BEFORE tools register.
+ * - When creds arrive via the background sign-in flow, run `runPostAuthInit`
+ *   (full scan) immediately after the tools are registered so the agent's
+ *   next `read_project_config` call sees a ready state with `unknown_tools`.
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { config } from '@toolcairn/config';
@@ -23,6 +31,7 @@ import {
   startDeviceAuth,
 } from '@toolcairn/remote';
 import { z } from 'zod';
+import { runPostAuthInit } from './post-auth-init.js';
 import { ensureProjectSetup } from './project-setup.js';
 import { addToolsToServer, buildProdServer } from './server.prod.js';
 import { createTransport } from './transport.js';
@@ -41,6 +50,22 @@ async function main(): Promise<void> {
 
   if (authenticated) {
     logger.info({ user: creds.user_email }, 'Authenticated — starting full server');
+    // Provision any discovered project root under CWD that is missing
+    // `.toolcairn/config.json`. Best-effort — a failure here never blocks the
+    // tool list from registering.
+    try {
+      const summary = await runPostAuthInit({ agent: 'claude', onlyMissingConfig: true });
+      logger.info(
+        {
+          roots: summary.roots_discovered.length,
+          provisioned: summary.projects.length,
+          unknown_tools_total: summary.unknown_tools_total,
+        },
+        'Startup auto-init complete',
+      );
+    } catch (err) {
+      logger.warn({ err }, 'Startup auto-init failed — continuing with tool registration');
+    }
     server = await buildProdServer();
   } else {
     let verificationUri = 'https://toolcairn.neurynae.com/signup';
@@ -65,7 +90,7 @@ async function main(): Promise<void> {
     }
 
     const instructions = userCode
-      ? `# ToolCairn — Sign In Required\n\nA browser window should have opened automatically.\n\n**Sign-in URL:** ${verificationUri}\n**Code to confirm:** \`${userCode}\`\n\nOpen the URL, sign in, and confirm the code shown. All 14 tools will appear automatically — no restart needed.`
+      ? `# ToolCairn — Sign In Required\n\nA browser window should have opened automatically.\n\n**Sign-in URL:** ${verificationUri}\n**Code to confirm:** \`${userCode}\`\n\nOpen the URL, sign in, and confirm the code shown. All 14 tools will appear automatically — no restart needed.\n\nAfter sign-in the server will automatically provision .toolcairn/config.json for every project root under your working directory (scan + graph classification).`
       : '# ToolCairn — Sign In Required\n\nVisit https://toolcairn.neurynae.com to create an account, then reconnect.';
 
     server = new McpServer({ name: 'toolcairn', version: '0.1.0' }, { instructions });
@@ -94,7 +119,8 @@ async function main(): Promise<void> {
     );
 
     // Start auth flow in background.
-    // On success: dynamically register all 14 tools on this same server.
+    // On success: dynamically register all 14 tools on this same server, then
+    // run the post-auth scan + config write for every discovered project root.
     // The MCP SDK sends notifications/tools/list_changed — client refreshes
     // the tool list automatically, no reconnect required.
     startDeviceAuth(config.TOOLPILOT_API_URL)
@@ -105,6 +131,20 @@ async function main(): Promise<void> {
           logger.info('All ToolCairn tools now available');
         } catch (err) {
           logger.error({ err }, 'Failed to add tools after sign-in — please reconnect');
+          return;
+        }
+        try {
+          const summary = await runPostAuthInit({ agent: 'claude' });
+          logger.info(
+            {
+              roots: summary.roots_discovered.length,
+              provisioned: summary.projects.length,
+              unknown_tools_total: summary.unknown_tools_total,
+            },
+            'Post-sign-in auto-init complete',
+          );
+        } catch (err) {
+          logger.warn({ err }, 'Post-sign-in auto-init failed — call toolcairn_init manually');
         }
       })
       .catch((err: unknown) => {
