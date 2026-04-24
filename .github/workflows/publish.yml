@@ -43,3 +43,34 @@ jobs:
         run: cd apps/mcp-server && npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Classify bump (patch|minor|major)
+        id: bump
+        run: |
+          PREV=$(npm view @neurynae/toolcairn-mcp version 2>/dev/null || echo "")
+          CURR=$(node -p "require('./apps/mcp-server/package.json').version")
+          node scripts/classify-bump.mjs "$PREV" "$CURR"
+
+      - name: Announce minor/major release to ToolCairn API
+        if: steps.bump.outputs.kind != 'patch' && steps.bump.outputs.curr != ''
+        env:
+          ORIGIN_SECRET: ${{ secrets.ORIGIN_SECRET }}
+          CURR: ${{ steps.bump.outputs.curr }}
+          PREV: ${{ steps.bump.outputs.prev }}
+          KIND: ${{ steps.bump.outputs.kind }}
+        run: |
+          if [ -z "$ORIGIN_SECRET" ]; then
+            echo "::warning::ORIGIN_SECRET not set — skipping release announcement"
+            exit 0
+          fi
+          curl -fsS -X POST https://api.neurynae.com/v1/internal/release-announce \
+            -H "Content-Type: application/json" \
+            -H "x-origin-secret: $ORIGIN_SECRET" \
+            -d "{
+              \"package\": \"@neurynae/toolcairn-mcp\",
+              \"prev\": \"$PREV\",
+              \"curr\": \"$CURR\",
+              \"kind\": \"$KIND\",
+              \"releaseNotesUrl\": \"https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}\"
+            }" \
+            || echo "::warning::Release announcement call failed — continuing"

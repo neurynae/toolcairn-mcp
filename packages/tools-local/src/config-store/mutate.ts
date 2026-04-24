@@ -30,7 +30,7 @@ export interface MutateResult {
  * The single supported entry point for mutating `.toolcairn/config.json`.
  *
  * Flow (under cross-process advisory lock):
- *   1. Ensure `.toolcairn/` exists + acquire `.toolcairn/config.lock`.
+ *   1. Ensure `.toolcairn/` exists + acquire `.toolcairn/config.json`.
  *   2. Read config.json (or bootstrap a fresh v1.1 skeleton if absent).
  *   3. If schema is v1.0, migrate in place and relocate legacy audit entries.
  *   4. Apply the caller-supplied `mutator(config)` on the in-memory object.
