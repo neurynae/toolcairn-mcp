@@ -76,6 +76,30 @@ export interface ConfirmedTool {
   match_method?: MatchMethod;
   /** Every (workspace, manifest, section) where this tool was detected. v1.1+. */
   locations?: ToolLocation[];
+  /** v1.2+: one-line description pulled from the ToolCairn graph. */
+  description?: string;
+  /** v1.2+: SPDX license identifier from the graph, if known. */
+  license?: string;
+  /** v1.2+: project homepage (not the GitHub URL — that's `github_url`). */
+  homepage_url?: string;
+  /** v1.2+: documentation link bundle from the graph. */
+  docs?: {
+    readme_url?: string;
+    docs_url?: string;
+    api_url?: string;
+    changelog_url?: string;
+  };
+  /**
+   * v1.2+: per-registry package channels (npm/pypi/cargo/…) with install
+   * commands and weekly downloads populated by the indexer. Lets agents pick
+   * the right install command without another round-trip.
+   */
+  package_managers?: Array<{
+    registry: string;
+    packageName: string;
+    installCommand?: string;
+    weeklyDownloads?: number;
+  }>;
 }
 
 export interface PendingTool {

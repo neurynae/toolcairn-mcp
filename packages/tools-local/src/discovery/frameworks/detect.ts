@@ -148,7 +148,27 @@ const FRAMEWORK_CATEGORIES = new Set([
 export interface BatchResolveResult {
   input: { name: string; ecosystem: Ecosystem };
   matched: boolean;
-  tool?: { canonical_name: string; categories: string[] };
+  tool?: {
+    canonical_name: string;
+    github_url?: string;
+    categories: string[];
+    /** v1.2+ enrichment — populated by batch-resolve's Memgraph pass. */
+    description?: string | null;
+    license?: string | null;
+    homepage_url?: string | null;
+    docs?: {
+      readme_url?: string | null;
+      docs_url?: string | null;
+      api_url?: string | null;
+      changelog_url?: string | null;
+    };
+    package_managers?: Array<{
+      registry: string;
+      packageName: string;
+      installCommand?: string;
+      weeklyDownloads?: number;
+    }>;
+  };
 }
 
 /**

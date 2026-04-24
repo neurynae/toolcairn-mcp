@@ -104,7 +104,26 @@ export class ToolCairnClient {
       input: { name: string; ecosystem: Ecosystem };
       matched: boolean;
       match_method: MatchMethod;
-      tool?: { canonical_name: string; github_url: string; categories: string[] };
+      tool?: {
+        canonical_name: string;
+        github_url: string;
+        categories: string[];
+        description?: string | null;
+        license?: string | null;
+        homepage_url?: string | null;
+        docs?: {
+          readme_url?: string | null;
+          docs_url?: string | null;
+          api_url?: string | null;
+          changelog_url?: string | null;
+        };
+        package_managers?: Array<{
+          registry: string;
+          packageName: string;
+          installCommand?: string;
+          weeklyDownloads?: number;
+        }>;
+      };
     }>;
     warnings: DiscoveryWarning[];
     methods: Map<string, MatchMethod>;
@@ -156,7 +175,26 @@ export class ToolCairnClient {
           input: { name: string; ecosystem: Ecosystem };
           matched?: boolean;
           match_method?: MatchMethod;
-          tool?: { canonical_name: string; github_url: string; categories: string[] };
+          tool?: {
+            canonical_name: string;
+            github_url: string;
+            categories: string[];
+            description?: string | null;
+            license?: string | null;
+            homepage_url?: string | null;
+            docs?: {
+              readme_url?: string | null;
+              docs_url?: string | null;
+              api_url?: string | null;
+              changelog_url?: string | null;
+            };
+            package_managers?: Array<{
+              registry: string;
+              packageName: string;
+              installCommand?: string;
+              weeklyDownloads?: number;
+            }>;
+          };
         }>;
       };
       if (!Array.isArray(body.resolved)) {
@@ -176,7 +214,26 @@ export class ToolCairnClient {
         input: { name: string; ecosystem: Ecosystem };
         matched: boolean;
         match_method: MatchMethod;
-        tool?: { canonical_name: string; github_url: string; categories: string[] };
+        tool?: {
+          canonical_name: string;
+          github_url: string;
+          categories: string[];
+          description?: string | null;
+          license?: string | null;
+          homepage_url?: string | null;
+          docs?: {
+            readme_url?: string | null;
+            docs_url?: string | null;
+            api_url?: string | null;
+            changelog_url?: string | null;
+          };
+          package_managers?: Array<{
+            registry: string;
+            packageName: string;
+            installCommand?: string;
+            weeklyDownloads?: number;
+          }>;
+        };
       }> = [];
       for (const entry of body.resolved) {
         const method = entry.match_method ?? (entry.matched ? 'tool_name_exact' : 'none');

@@ -284,6 +284,20 @@ export async function scanProject(
       locations.find((l) => l.resolved_version)?.resolved_version ??
       locations[0]?.version_constraint;
 
+    // Enrichment fields from the graph — present only for matched tools.
+    // Null-coalesce to undefined so JSON serialisation drops missing keys
+    // instead of writing nulls everywhere in config.json.
+    const toolRef = graph?.tool;
+    const docs = toolRef?.docs
+      ? {
+          readme_url: toolRef.docs.readme_url ?? undefined,
+          docs_url: toolRef.docs.docs_url ?? undefined,
+          api_url: toolRef.docs.api_url ?? undefined,
+          changelog_url: toolRef.docs.changelog_url ?? undefined,
+        }
+      : undefined;
+    const hasDocs = docs && Object.values(docs).some((v) => v !== undefined);
+
     confirmed.push({
       name,
       source,
@@ -296,6 +310,14 @@ export async function scanProject(
       categories,
       match_method: matchMethod,
       locations,
+      description: toolRef?.description ?? undefined,
+      license: toolRef?.license ?? undefined,
+      homepage_url: toolRef?.homepage_url ?? undefined,
+      docs: hasDocs ? docs : undefined,
+      package_managers:
+        toolRef?.package_managers && toolRef.package_managers.length > 0
+          ? toolRef.package_managers
+          : undefined,
     });
   }
   // Stable order: indexed first (alphabetical), then non-indexed (alphabetical)

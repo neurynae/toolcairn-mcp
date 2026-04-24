@@ -39,72 +39,46 @@ const TOOLCAIRN_MCP_ENTRY = IS_WINDOWS
     };
 
 const CORE_RULES = `
-## ToolCairn — Tool Intelligence MCP
+## ToolCairn MCP — Tool Intelligence
 
-ToolCairn is your tool intelligence co-pilot. It has a graph database of 500+ indexed tools with health signals, compatibility data, and known issue tracking. Always use it before recommending any tool, library, or framework.
+Graph-backed catalog of tools with health, compatibility, and issue data. Always consult before recommending a tool/library/framework. The server owns \`.toolcairn/config.json\` + \`audit-log.jsonl\` under a cross-process lock — never read/write these files directly; use the MCP tools.
 
-### The Server Owns .toolcairn/ (v0.10.0+)
+### First-turn protocol
 
-The MCP server reads and writes \`.toolcairn/config.json\` and
-\`.toolcairn/audit-log.jsonl\` atomically under a cross-process lock.
-NEVER read or write these files directly — call the MCP tools instead.
+1. \`read_project_config({ project_root })\`. If \`status:"not_initialized"\`, call \`toolcairn_init\`. (Auto-init usually ran during \`toolcairn_auth\` already.)
+2. **If \`unknown_tools[]\` is non-empty** — BEFORE replying to the user:
+   - \`suggest_graph_update({ suggestion_type:"new_tool", data:{ tools: <unknown_tools array> } })\` — entries are STAGED for admin review, NOT live.
+   - \`update_project_config({ action:"mark_suggestions_sent", data:{ tool_names: <names that staged ok> } })\`.
+   - Repeat per root in monorepos (each has its own list).
 
-### Workflow for Tool Selection
+### Tool reference
 
-1. **Session start**: Typically auto-init has already run during \`toolcairn_auth\` so
-   \`.toolcairn/config.json\` is provisioned. Start by calling \`read_project_config\`
-   with the project_root to load the snapshot. If it returns \`status: "not_initialized"\`
-   (rare — only when auto-init skipped the root), call \`toolcairn_init\`.
-2. **First-turn drain protocol** (CRITICAL — runs BEFORE your first reply to the user):
-   If the auth response OR \`read_project_config\` returned non-empty \`unknown_tools[]\`,
-   you MUST submit them in ONE call:
-   - \`suggest_graph_update\` with \`suggestion_type: "new_tool"\` and
-     \`data.tools: <the full unknown_tools array, each entry is {tool_name, github_url}>\`
-   These are STAGED for admin review — they do NOT enter the live graph until approved.
-   Immediately after, call \`update_project_config\` with
-   \`action: "mark_suggestions_sent"\` and \`data.tool_names: [names that staged ok]\`.
-   In multi-root workspaces repeat once per root (each has its own \`unknown_tools[]\`).
-   Do not skip — this is how ToolCairn learns about your project's OSS stack.
-3. **Before recommending any tool**: Call \`search_tools\` first. Never recommend from
-   training data alone.
-4. **When user describes a use case**: Call \`classify_prompt\`, then \`refine_requirement\`
-   if tool selection is needed.
-5. **When a tool is selected / replaced / dropped**: Call \`update_project_config\` with
-   project_root + action — the server atomically updates config.json and appends to
-   audit-log.jsonl.
-6. **When encountering an error with a tool**: Call \`check_issue\` before debugging —
-   it may be a known issue with an open GitHub ticket.
-7. **When user asks to compare tools**: Call \`compare_tools\`.
-8. **When user chooses a non-indexed/proprietary tool**: Call \`update_project_config\`
-   with \`data: { source: "non_oss" }\`.
-
-### Available ToolCairn MCP Tools
-
-| Tool | When to use |
-|------|------------|
-| \`classify_prompt\` | User describes a task — determine if tool search needed |
-| \`refine_requirement\` | Decompose vague use case into searchable tool needs |
-| \`search_tools\` | Find the best tool for a specific need |
-| \`search_tools_respond\` | Answer clarification questions from search_tools |
-| \`get_stack\` | Get recommended tool stack for a use case |
-| \`check_issue\` | Check if an error is a known tool bug before debugging |
-| \`check_compatibility\` | Check if two tools work well together |
-| \`compare_tools\` | Compare two tools with health and graph data |
-| \`report_outcome\` | Report whether a recommended tool worked (improves future results) |
-| \`toolcairn_init\` | One-call project bootstrap (auto-discovers + writes config.json) |
-| \`read_project_config\` | Read .toolcairn/config.json from disk (returns structured snapshot) |
-| \`update_project_config\` | Apply a mutation (add_tool / remove_tool / update_tool / add_evaluation) |
-| \`suggest_graph_update\` | Suggest a new tool or relationship for the ToolCairn graph |
+| Tool | Trigger |
+|------|---------|
+| \`classify_prompt\` | User describes a task — decide whether tool search is needed |
+| \`refine_requirement\` | Decompose a use case into searchable sub-needs (required input for \`get_stack\`) |
+| \`search_tools\` | Find the best tool for one specific need |
+| \`search_tools_respond\` | Submit clarification answers for an in-progress search session |
+| \`get_stack\` | Build a version-compatible multi-layer stack for a use case |
+| \`compare_tools\` | Head-to-head comparison of two tools |
+| \`check_compatibility\` | Version-aware compatibility check between two tools |
+| \`check_issue\` | LAST RESORT — known-bug lookup after 4+ retries + docs review |
+| \`verify_suggestion\` | Validate agent-picked tool names against the graph |
+| \`report_outcome\` | Fire-and-forget feedback after using a recommended tool |
+| \`suggest_graph_update\` | Stage a new tool / edge / use-case for admin review (never writes live) |
+| \`toolcairn_init\` | Manual project re-scan (auto-init usually covers it) |
+| \`read_project_config\` | Load project snapshot (confirmed, pending, unknown, stale, metadata) |
+| \`update_project_config\` | Mutate confirmed tools or mark unknown suggestions sent |
+| \`toolcairn_auth\` | Login / status / logout for ToolCairn credentials |
 
 ### Rules
 
-- NEVER recommend a tool without first checking ToolCairn unless the tool is already in the project config
-- Always call \`read_project_config\` at the start of a session
-- NEVER write to .toolcairn/config.json or .toolcairn/audit-log.jsonl yourself — the server owns them
-- Prefer open-source tools from ToolCairn index; flag proprietary alternatives clearly
-- After selecting a tool, always call \`update_project_config\` to persist it
-- After using a tool successfully/unsuccessfully, call \`report_outcome\`
-- **Drain \`unknown_tools[]\` before your first reply** via \`suggest_graph_update\` (batch) + \`update_project_config\` action="mark_suggestions_sent". Staging-only — admin approval gates live promotion.
+- Never recommend a tool that isn't in \`confirmed_tools\` without first hitting \`search_tools\` / \`get_stack\`.
+- After selecting a tool: \`update_project_config({ action:"add_tool", tool_name, data: {...} })\`. Pass \`data.source:"non_oss"\` for proprietary picks.
+- After using a tool (success or failure): \`report_outcome\`.
+- Use \`check_issue\` only after docs + 4 retries — it's network-heavy.
+- Confirmed tools in config.json carry graph enrichment: \`description\`, \`license\`, \`homepage_url\`, \`docs.{readme_url,docs_url,api_url,changelog_url}\`, and \`package_managers[]\` with install commands. Prefer these over re-fetching.
+- Suggestions are STAGED; admin approval gates live-graph promotion.
 `;
 
 export function getClaudeInstructions(): InstructionTemplate {
