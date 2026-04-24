@@ -45,20 +45,17 @@ import {
 
 const logger = createMcpLogger({ name: '@toolcairn/tools:auto-init' });
 
-/**
- * Sentinel string that marks the ToolCairn rules block inside any agent
- * instruction file (CLAUDE.md, .cursorrules, AGENTS.md, etc). Matches the
- * actual heading inside CORE_RULES in `templates/agent-instructions.ts` —
- * keep these in sync if either changes.
- */
-const INSTRUCTION_SENTINEL = '## ToolCairn — Tool Intelligence MCP';
-
-/** Sentinel for the ToolCairn block inside .gitignore. */
-const GITIGNORE_SENTINEL = '# ToolCairn';
+// No sentinel / marker matching for the agent instruction file — it's
+// server-owned, so every reconnect simply overwrites it with the current
+// CORE_RULES content. The MCP server is the source of truth; user-authored
+// notes belong in a separate file (or outside our managed block).
+//
+// .gitignore is different: users have their own ignore rules we mustn't
+// touch. We preserve those and refresh only our block in place.
 
 /** The exact block we append to .gitignore (kept minimal + human-readable). */
 const GITIGNORE_BLOCK =
-  '\n# ToolCairn\n.toolcairn/events.jsonl\n.toolcairn/audit-log.jsonl\n.toolcairn/audit-log.archive.jsonl\n.toolcairn/config.lock\n';
+  '\n# ToolCairn\n.toolcairn/events.jsonl\n.toolcairn/audit-log.jsonl\n.toolcairn/audit-log.archive.jsonl\n.toolcairn/config.json\n';
 
 export interface AutoInitInput {
   projectRoot: string;
@@ -374,9 +371,14 @@ async function applySetupFiles(
 /**
  * CLAUDE.md / .cursorrules / AGENTS.md / etc.
  *
- * If the file exists and already contains the ToolCairn sentinel heading,
- * no-op (idempotent across re-runs). Otherwise append (or create) with the
- * current CORE_RULES block. We never mutate existing content — only add.
+ * Server-owned file: every reconnect overwrites it with the current
+ * CORE_RULES content. No keyword or marker detection — the MCP server is
+ * the source of truth, and trying to merge user-authored prose into a
+ * server-managed file just creates sentinel-drift bugs when the rules
+ * heading changes.
+ *
+ * If you need to keep your own project notes, put them in a sibling file
+ * (e.g. PROJECT_NOTES.md) that the server doesn't touch.
  */
 async function applyInstructionFile(
   abs: string,
@@ -384,20 +386,18 @@ async function applyInstructionFile(
   content: string,
 ): Promise<AppliedSetupStep> {
   try {
-    const exists = await fileExists(abs);
-    if (exists) {
+    // Skip the write when the file already holds the exact content we'd
+    // produce — saves the audit entry + filesystem churn on reconnects.
+    if (await fileExists(abs)) {
       const current = await readFile(abs, 'utf-8');
-      if (current.includes(INSTRUCTION_SENTINEL)) {
+      if (current === content) {
         return {
           file: relPath,
           action: 'append-or-create',
           applied: false,
-          reason: 'ToolCairn rules block already present',
+          reason: 'content already up to date',
         };
       }
-      const separator = current.endsWith('\n') ? '' : '\n';
-      await writeFileAtomic(abs, `${current}${separator}${content}`, 'utf-8');
-      return { file: relPath, action: 'append-or-create', applied: true };
     }
     await writeFileAtomic(abs, content, 'utf-8');
     return { file: relPath, action: 'append-or-create', applied: true };
@@ -411,14 +411,11 @@ async function applyInstructionFile(
 /**
  * .mcp.json (or opencode.json for OpenCode agents).
  *
- * Three cases:
- *   - File missing: create with just the toolcairn entry.
- *   - File valid JSON but no `toolcairn` entry: merge in without disturbing
- *     existing mcpServers (or `mcp` for OpenCode).
- *   - File has `toolcairn` entry already: no-op.
- *   - File is unparseable: refuse to overwrite — user may have written
- *     something custom. Report reason in applied_steps; caller can retry
- *     after fixing the file.
+ * The `toolcairn` entry under `mcpServers` / `mcp` is always refreshed with
+ * the current entry shape (command + args) — picks up changes to the launcher
+ * between MCP versions. Other entries (user's own MCP servers) are preserved
+ * untouched. If the existing file isn't valid JSON we refuse to overwrite
+ * so we don't destroy hand-written config; the caller reports the reason.
  */
 async function applyMcpConfig(
   abs: string,
@@ -454,20 +451,27 @@ async function applyMcpConfig(
         ? (parsed[topKey] as Record<string, unknown>)
         : {};
 
-    if (existingServers.toolcairn !== undefined) {
+    // Always replace `toolcairn` with the latest entry. Other MCP servers
+    // the user has configured stay untouched (spread existingServers first,
+    // then overlay our entry — a fresh object so deleted fields don't linger).
+    const toolcairnEntry = (entry as { toolcairn?: Record<string, unknown> }).toolcairn ?? entry;
+    const merged = {
+      ...parsed,
+      [topKey]: {
+        ...existingServers,
+        toolcairn: toolcairnEntry,
+      },
+    };
+    const nextJson = `${JSON.stringify(merged, null, 2)}\n`;
+    if (raw === nextJson) {
       return {
         file: relPath,
         action: 'merge-or-create',
         applied: false,
-        reason: `${topKey}.toolcairn already present`,
+        reason: 'toolcairn entry already up to date',
       };
     }
-
-    const merged = {
-      ...parsed,
-      [topKey]: { ...existingServers, ...entry },
-    };
-    await writeFileAtomic(abs, `${JSON.stringify(merged, null, 2)}\n`, 'utf-8');
+    await writeFileAtomic(abs, nextJson, 'utf-8');
     return { file: relPath, action: 'merge-or-create', applied: true };
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
@@ -477,29 +481,60 @@ async function applyMcpConfig(
 }
 
 /**
- * .gitignore — append the ToolCairn runtime-files block if the sentinel
- * header (`# ToolCairn`) isn't already present. Never overwrites existing
- * entries.
+ * .gitignore — refreshes only the ToolCairn block between stable markers,
+ * preserves every other rule in the file.
+ *
+ * Rule: everything between `# toolcairn:start` and `# toolcairn:end` is
+ * server-owned and gets replaced every reconnect. Lines outside the
+ * markers are the user's and we never touch them. If markers don't exist,
+ * we append the block at the end. No keyword detection of any kind.
  */
+const GITIGNORE_BLOCK_START = '# toolcairn:start';
+const GITIGNORE_BLOCK_END = '# toolcairn:end';
+
+function buildGitignoreBlock(): string {
+  return `${GITIGNORE_BLOCK_START}${GITIGNORE_BLOCK}${GITIGNORE_BLOCK_END}\n`;
+}
+
 async function applyGitignore(abs: string): Promise<AppliedSetupStep> {
   const relPath = '.gitignore';
   try {
     const exists = await fileExists(abs);
+    const ourBlock = buildGitignoreBlock();
+
     if (!exists) {
-      await writeFileAtomic(abs, GITIGNORE_BLOCK.replace(/^\n/, ''), 'utf-8');
+      await writeFileAtomic(abs, ourBlock, 'utf-8');
       return { file: relPath, action: 'append', applied: true };
     }
     const current = await readFile(abs, 'utf-8');
-    if (current.includes(GITIGNORE_SENTINEL)) {
+    const startIdx = current.indexOf(GITIGNORE_BLOCK_START);
+    const endIdx = current.indexOf(GITIGNORE_BLOCK_END);
+
+    let next: string;
+    if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+      // Replace in place. Slice up to start-of-line for the opening marker
+      // and just past end-of-line for the closing marker so we don't leave
+      // ragged newlines.
+      const lineStart = current.lastIndexOf('\n', startIdx) + 1;
+      const afterEndOfLine = current.indexOf('\n', endIdx);
+      const sliceEnd = afterEndOfLine === -1 ? current.length : afterEndOfLine + 1;
+      next = current.slice(0, lineStart) + ourBlock + current.slice(sliceEnd);
+    } else {
+      // No markers → append. Users with an older, unmarked ToolCairn block
+      // will briefly have both; a manual one-line cleanup resolves it.
+      const separator = current.endsWith('\n') ? '' : '\n';
+      next = `${current}${separator}${ourBlock}`;
+    }
+
+    if (next === current) {
       return {
         file: relPath,
         action: 'append',
         applied: false,
-        reason: 'ToolCairn gitignore block already present',
+        reason: 'block already up to date',
       };
     }
-    const separator = current.endsWith('\n') ? '' : '\n';
-    await writeFileAtomic(abs, `${current}${separator}${GITIGNORE_BLOCK}`, 'utf-8');
+    await writeFileAtomic(abs, next, 'utf-8');
     return { file: relPath, action: 'append', applied: true };
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
