@@ -291,6 +291,36 @@ export class ToolCairnClient {
   private async post(path: string, body: unknown): Promise<CallToolResult> {
     try {
       const res = await this.rawPost(path, body);
+
+      // ── Daily limit + bonus-credit exhausted fallback ──────────────────
+      // When the CF Worker returns 429 with `limit_exhausted: true`, surface
+      // the server's user-facing message as a normal tool result so the
+      // agent relays it verbatim to the user (instead of swallowing it as
+      // a generic tool error).
+      if (res.status === 429) {
+        const exhausted = res.headers.get('x-toolcairn-limit-exhausted') === '1';
+        if (exhausted) {
+          try {
+            const body429 = (await res.clone().json()) as {
+              message?: string;
+              waitlist_url?: string;
+              upgrade_url?: string;
+            };
+            const text =
+              body429.message ??
+              'ToolCairn daily limit reached. Join the Pro waitlist for 1 month free: https://toolcairn.neurynae.com/waitlist?source=limit_exhausted';
+            return {
+              content: [{ type: 'text', text }],
+              // isError=false so the agent treats this as a successful tool
+              // response and relays the message to the user instead of
+              // retrying or bubbling a generic error.
+            };
+          } catch {
+            // fall through to the generic error path below
+          }
+        }
+      }
+
       const data = (await res.json()) as CallToolResult;
 
       // API returns a CallToolResult directly — pass it through
