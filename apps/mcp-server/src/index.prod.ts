@@ -50,31 +50,11 @@ async function main(): Promise<void> {
 
   if (authenticated) {
     logger.info({ user: creds.user_email }, 'Authenticated — starting full server');
-    // Re-scan every discovered project root on EVERY startup/reconnect. The
-    // scan is merge-preserving in autoInitProject (see the confirmed[] merge
-    // in packages/tools-local/src/auto-init.ts): user-set fields (chosen_reason,
-    // notes, alternatives_considered, query_id, confirmed_at, chosen_at) are
-    // carried forward from the existing config, while graph-derived fields
-    // (description, license, homepage_url, docs, package_managers, categories,
-    // canonical_name) are refreshed from batch-resolve. Same semantics for
-    // unknown_in_graph — `suggested: true` flags survive.
-    //
-    // When batch-resolve is offline the scan leaves confirmed[] untouched to
-    // avoid silently flipping matched tools to non_oss. Best-effort overall —
-    // a scan failure never blocks tool registration.
-    try {
-      const summary = await runPostAuthInit({ agent: 'claude' });
-      logger.info(
-        {
-          roots: summary.roots_discovered.length,
-          provisioned: summary.projects.length,
-          unknown_tools_total: summary.unknown_tools_total,
-        },
-        'Startup auto-refresh complete',
-      );
-    } catch (err) {
-      logger.warn({ err }, 'Startup auto-refresh failed — continuing with tool registration');
-    }
+    // Register tool schemas ONLY on the hot path. Auto-refresh runs in the
+    // background AFTER `server.connect(transport)` below so the MCP client's
+    // `initialize` handshake gets an immediate response — blocking it on a
+    // multi-root scan (12 ecosystems + batch-resolve + speculative registry
+    // probes) was the root cause of the 90% first-reconnect failure rate.
     server = await buildProdServer();
   } else {
     let verificationUri = 'https://toolcairn.neurynae.com/signup';
@@ -164,6 +144,33 @@ async function main(): Promise<void> {
   const transport = createTransport();
   await server.connect(transport);
   logger.info(authenticated ? 'ToolCairn MCP ready' : 'ToolCairn MCP ready (awaiting sign-in)');
+
+  // Background auto-refresh for authenticated sessions. Fires after the
+  // stdio handshake so a slow scan never blocks `initialize`. Semantics match
+  // the sync path: re-scans every discovered project root, merge-preserves
+  // user-set fields (chosen_reason / notes / alternatives_considered /
+  // query_id / chosen_at / confirmed_at), refreshes graph-derived fields
+  // (description / license / homepage_url / docs / package_managers /
+  // categories / canonical_name / match_method) from batch-resolve, keeps
+  // already-drained `unknown_in_graph[].suggested: true` flags. If
+  // batch-resolve is offline, autoInitProject short-circuits the confirmed[]
+  // replacement — no silent flip to non_oss.
+  if (authenticated) {
+    void runPostAuthInit({ agent: 'claude' })
+      .then((summary) => {
+        logger.info(
+          {
+            roots: summary.roots_discovered.length,
+            provisioned: summary.projects.length,
+            unknown_tools_total: summary.unknown_tools_total,
+          },
+          'Background auto-refresh complete',
+        );
+      })
+      .catch((err: unknown) => {
+        logger.warn({ err }, 'Background auto-refresh failed — config left as-is');
+      });
+  }
 }
 
 main().catch((error: unknown) => {
