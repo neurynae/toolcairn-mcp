@@ -50,21 +50,30 @@ async function main(): Promise<void> {
 
   if (authenticated) {
     logger.info({ user: creds.user_email }, 'Authenticated — starting full server');
-    // Provision any discovered project root under CWD that is missing
-    // `.toolcairn/config.json`. Best-effort — a failure here never blocks the
-    // tool list from registering.
+    // Re-scan every discovered project root on EVERY startup/reconnect. The
+    // scan is merge-preserving in autoInitProject (see the confirmed[] merge
+    // in packages/tools-local/src/auto-init.ts): user-set fields (chosen_reason,
+    // notes, alternatives_considered, query_id, confirmed_at, chosen_at) are
+    // carried forward from the existing config, while graph-derived fields
+    // (description, license, homepage_url, docs, package_managers, categories,
+    // canonical_name) are refreshed from batch-resolve. Same semantics for
+    // unknown_in_graph — `suggested: true` flags survive.
+    //
+    // When batch-resolve is offline the scan leaves confirmed[] untouched to
+    // avoid silently flipping matched tools to non_oss. Best-effort overall —
+    // a scan failure never blocks tool registration.
     try {
-      const summary = await runPostAuthInit({ agent: 'claude', onlyMissingConfig: true });
+      const summary = await runPostAuthInit({ agent: 'claude' });
       logger.info(
         {
           roots: summary.roots_discovered.length,
           provisioned: summary.projects.length,
           unknown_tools_total: summary.unknown_tools_total,
         },
-        'Startup auto-init complete',
+        'Startup auto-refresh complete',
       );
     } catch (err) {
-      logger.warn({ err }, 'Startup auto-init failed — continuing with tool registration');
+      logger.warn({ err }, 'Startup auto-refresh failed — continuing with tool registration');
     }
     server = await buildProdServer();
   } else {

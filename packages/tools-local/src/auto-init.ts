@@ -24,6 +24,7 @@ import { resolve } from 'node:path';
 import { createMcpLogger } from '@toolcairn/errors';
 import type {
   ConfigAuditEntry,
+  ConfirmedTool,
   DiscoveryWarning,
   Ecosystem,
   ProjectFramework,
@@ -182,17 +183,60 @@ export async function autoInitProject(input: AutoInitInput): Promise<AutoInitRes
       cfg.project.languages = scan.languages;
       cfg.project.frameworks = scan.frameworks;
       cfg.project.subprojects = scan.subprojects;
-      cfg.tools.confirmed = scan.tools;
       cfg.scan_metadata = scan.scan_metadata;
+
+      // Merge confirmed[] — reconnect/auto-refresh must preserve user fields.
+      //
+      // Scan output supplies the latest graph/registry-derived truth
+      // (description, license, homepage_url, docs, package_managers, categories,
+      // canonical_name, match_method, locations, github_url, version). User
+      // fields that we must NOT clobber on re-scan: chosen_reason, notes,
+      // alternatives_considered, query_id, confirmed_at/chosen_at (original
+      // add timestamp). last_verified is bumped to now to reflect the fresh
+      // verification.
+      //
+      // Safety: when batch-resolve failed (offline / engine down), EVERY scan
+      // tool would come back as source='non_oss', which would incorrectly
+      // flip previously-matched tools. Short-circuit and leave cfg.tools.confirmed
+      // untouched in that case.
+      if (!batchResolveFailed) {
+        const priorConfirmedByKey = new Map<string, ConfirmedTool>();
+        for (const existing of cfg.tools.confirmed) {
+          const eco = existing.locations?.[0]?.ecosystem ?? '';
+          priorConfirmedByKey.set(`${eco}:${existing.name}`, existing);
+        }
+        cfg.tools.confirmed = scan.tools.map((fresh) => {
+          const eco = fresh.locations?.[0]?.ecosystem ?? '';
+          const prior = priorConfirmedByKey.get(`${eco}:${fresh.name}`);
+          if (!prior) return fresh;
+          return {
+            ...fresh,
+            // Preserve add-time ordinals + user-set fields.
+            chosen_at: prior.chosen_at ?? fresh.chosen_at,
+            confirmed_at: prior.confirmed_at ?? prior.chosen_at ?? fresh.chosen_at,
+            last_verified: now,
+            chosen_reason:
+              prior.chosen_reason && prior.chosen_reason.length > 0
+                ? prior.chosen_reason
+                : fresh.chosen_reason,
+            alternatives_considered:
+              prior.alternatives_considered && prior.alternatives_considered.length > 0
+                ? prior.alternatives_considered
+                : fresh.alternatives_considered,
+            query_id: prior.query_id ?? fresh.query_id,
+            notes: prior.notes ?? fresh.notes,
+          };
+        });
+      }
 
       // Merge unknown_in_graph: preserve `suggested: true` flags from prior runs
       // if the agent already drained them — a re-scan shouldn't undo progress.
-      const priorByKey = new Map<string, UnknownInGraphTool>();
+      const priorUnknownByKey = new Map<string, UnknownInGraphTool>();
       for (const existing of cfg.tools.unknown_in_graph ?? []) {
-        priorByKey.set(`${existing.ecosystem}:${existing.name}`, existing);
+        priorUnknownByKey.set(`${existing.ecosystem}:${existing.name}`, existing);
       }
       cfg.tools.unknown_in_graph = unknownFromScan.map((fresh) => {
-        const prior = priorByKey.get(`${fresh.ecosystem}:${fresh.name}`);
+        const prior = priorUnknownByKey.get(`${fresh.ecosystem}:${fresh.name}`);
         if (prior?.suggested) {
           return { ...fresh, suggested: true, suggested_at: prior.suggested_at };
         }
