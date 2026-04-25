@@ -17,7 +17,16 @@ export default defineConfig({
   target: 'node22',
   outDir: 'dist',
   bundle: true,
-  sourcemap: true,
+  // Sourcemap intentionally OFF for the published bundle — the .map file
+  // nearly doubles the npm tarball size (~470KB on top of ~240KB code) and
+  // is never used at runtime, only for human debugging. With `@latest` in
+  // .mcp.json, every fresh publish forces npx to download the new tarball
+  // before the MCP startup timeout fires; halving the download fits cold
+  // reconnects inside Claude Code's ~10s window.
+  sourcemap: false,
+  // Drop comments from the bundle (~5-10% additional shrink) since the
+  // bundled source isn't human-read.
+  minify: false,
   clean: true,
   // tsup's built-in shims for __dirname/__filename (ESM doesn't have them).
   shims: true,

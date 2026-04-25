@@ -1,6 +1,6 @@
 {
   "name": "@neurynae/toolcairn-mcp",
-  "version": "0.10.13",
+  "version": "0.10.14",
   "private": false,
   "license": "MIT",
   "type": "module",
@@ -25,8 +25,7 @@
   },
   "files": [
     "dist/",
-    "bin/",
-    "data/"
+    "bin/"
   ],
   "engines": {
     "node": ">=22.0.0"
