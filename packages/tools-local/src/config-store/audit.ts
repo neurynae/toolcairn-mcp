@@ -1,16 +1,22 @@
 import { appendFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { createMcpLogger } from '@toolcairn/errors';
 import type { ConfigAuditEntry } from '@toolcairn/types';
+import lockfile from 'proper-lockfile';
 import writeFileAtomic from 'write-file-atomic';
 import { fileExists } from '../discovery/util/fs.js';
-import { joinAuditArchivePath, joinAuditPath, joinConfigDir } from './paths.js';
+import { emptySkeleton } from './skeleton.js';
+import { joinAuditArchivePath, joinAuditPath, joinConfigDir, joinConfigPath } from './paths.js';
 
 const logger = createMcpLogger({ name: '@toolcairn/tools:audit-log' });
 
-/** Maximum entries retained in the live audit-log.jsonl before FIFO archive. */
-const MAX_LIVE_ENTRIES = 1000;
+/**
+ * Maximum entries retained in the live audit-log.jsonl before FIFO archive.
+ * Bumped from 1000 → 5000 in v1.2.1: every MCP tool call now produces an
+ * audit entry, so the log churns ~10x faster than the old config-mutation-only mode.
+ */
+const MAX_LIVE_ENTRIES = 5000;
 /** Entries moved to the archive when the live file exceeds MAX_LIVE_ENTRIES. */
-const ARCHIVE_BATCH = 500;
+const ARCHIVE_BATCH = 2500;
 
 /**
  * Appends one entry to `.toolcairn/audit-log.jsonl`, creating the file if absent.
@@ -45,6 +51,59 @@ export async function bulkAppendAudit(
   const payload = entries.map((e) => `${JSON.stringify(e)}\n`).join('');
   await appendFile(auditPath, payload, 'utf-8');
   await rotateIfNeeded(projectRoot, auditPath);
+}
+
+/**
+ * Self-locking append for tool-call audit entries. Used by the MCP server's
+ * audit-log middleware after every tool invocation — the call site does NOT
+ * already hold the config lock (unlike `mutateConfig` which calls plain
+ * `appendAudit` while it owns the lock).
+ *
+ * Idempotently bootstraps `.toolcairn/config.json` if missing so the lock
+ * target exists. If bootstrap fails (read-only FS, permissions), the call is
+ * a silent no-op — audit logging must never block real work.
+ */
+export async function appendToolCallAudit(
+  projectRoot: string,
+  entry: ConfigAuditEntry,
+): Promise<void> {
+  try {
+    await ensureLockable(projectRoot);
+  } catch (err) {
+    logger.debug({ err, projectRoot }, 'audit-log: bootstrap skipped (read-only?) — abandoning');
+    return;
+  }
+
+  const configPath = joinConfigPath(projectRoot);
+  let release: (() => Promise<void>) | null = null;
+  try {
+    release = await lockfile.lock(configPath, {
+      stale: 10_000,
+      retries: { retries: 5, minTimeout: 50, factor: 2, maxTimeout: 500 },
+      realpath: false,
+    });
+    await appendAudit(projectRoot, entry);
+  } catch (err) {
+    logger.warn({ err, projectRoot }, 'audit-log: tool-call append failed');
+  } finally {
+    if (release) {
+      try {
+        await release();
+      } catch (err) {
+        logger.debug({ err }, 'audit-log: lock release failed (likely already stale)');
+      }
+    }
+  }
+}
+
+async function ensureLockable(projectRoot: string): Promise<void> {
+  await mkdir(joinConfigDir(projectRoot), { recursive: true });
+  const configPath = joinConfigPath(projectRoot);
+  if (!(await fileExists(configPath))) {
+    // proper-lockfile requires the lock target to exist — seed an empty
+    // skeleton if absent. mutateConfig will overwrite this on its next run.
+    await writeFile(configPath, `${JSON.stringify(emptySkeleton(), null, 2)}\n`, 'utf-8');
+  }
 }
 
 /** Returns all audit entries in the live file (not the archive). Parse errors are skipped. */

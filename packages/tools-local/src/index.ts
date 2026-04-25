@@ -39,6 +39,7 @@ export {
   readConfig,
   writeConfig,
   appendAudit,
+  appendToolCallAudit,
   bulkAppendAudit,
   readLiveAudit,
   migrateToV1_1,

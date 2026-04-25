@@ -1,12 +1,79 @@
 import { createMcpLogger } from '@toolcairn/errors';
-import type { ConfirmedTool, ToolPilotProjectConfig } from '@toolcairn/types';
-import { joinAuditPath, joinConfigPath, mutateConfig, readConfig } from '../config-store/index.js';
+import type { ConfigAuditEntry, ConfirmedTool, ToolPilotProjectConfig } from '@toolcairn/types';
+import {
+  joinAuditPath,
+  joinConfigPath,
+  mutateConfig,
+  readConfig,
+  readLiveAudit,
+} from '../config-store/index.js';
 import { errResult, okResult } from '../utils.js';
 
 const logger = createMcpLogger({ name: '@toolcairn/tools:read-project-config' });
 
 /** Tools older than this many days are flagged for re-evaluation. */
 const STALENESS_THRESHOLD_DAYS = 90;
+
+/** Outcomes older than this are dropped from the pending list (assumed abandoned). */
+const PENDING_OUTCOME_TTL_DAYS = 7;
+
+/** MCP tools whose successful response carries a query_id agents should report on. */
+const RECOMMENDATION_MCP_TOOLS = new Set([
+  'search_tools',
+  'search_tools_respond',
+  'get_stack',
+]);
+
+interface PendingOutcome {
+  query_id: string;
+  mcp_tool: string;
+  selected_at: string;
+  age_hours: number;
+  candidates: string[];
+  query: string | null;
+}
+
+/**
+ * Walk the live audit log and surface query_ids that received a recommendation
+ * but no matching report_outcome yet. Bounded to the last PENDING_OUTCOME_TTL_DAYS
+ * to avoid nagging about long-abandoned sessions.
+ */
+function derivePendingOutcomes(entries: ConfigAuditEntry[]): PendingOutcome[] {
+  const cutoff = Date.now() - PENDING_OUTCOME_TTL_DAYS * 24 * 60 * 60 * 1000;
+  const open = new Map<string, PendingOutcome>();
+
+  for (const e of entries) {
+    if (e.action !== 'tool_call' || !e.query_id) continue;
+    if (e.status === 'error') continue;
+    const ts = Date.parse(e.timestamp);
+    if (Number.isNaN(ts) || ts < cutoff) continue;
+
+    if (e.mcp_tool && RECOMMENDATION_MCP_TOOLS.has(e.mcp_tool)) {
+      // Latest recommendation wins — overwrite any earlier same-query entry so
+      // the surfaced age reflects the most recent search call.
+      const queryFromMeta =
+        typeof e.metadata?.query === 'string'
+          ? e.metadata.query
+          : typeof e.metadata?.use_case === 'string'
+            ? e.metadata.use_case
+            : null;
+      open.set(e.query_id, {
+        query_id: e.query_id,
+        mcp_tool: e.mcp_tool,
+        selected_at: e.timestamp,
+        age_hours: Math.round((Date.now() - ts) / (1000 * 60 * 60)),
+        candidates: e.candidates ?? [],
+        query: queryFromMeta,
+      });
+    } else if (e.mcp_tool === 'report_outcome') {
+      open.delete(e.query_id);
+    }
+  }
+
+  return Array.from(open.values()).sort(
+    (a, b) => Date.parse(a.selected_at) - Date.parse(b.selected_at),
+  );
+}
 
 function daysSince(isoDate: string): number {
   return (Date.now() - new Date(isoDate).getTime()) / (1000 * 60 * 60 * 24);
@@ -81,6 +148,17 @@ export async function handleReadProjectConfig(args: {
     // the config so the drain protocol survives process restarts.
     const unknown_tools = (config.tools.unknown_in_graph ?? []).filter((t) => !t.suggested);
 
+    // v1.2.1+: derive pending outcomes from the audit log so the agent sees,
+    // at session start, every recommendation it still owes a report_outcome on.
+    // Best-effort: a missing or malformed audit log returns [] silently.
+    let pending_outcomes: PendingOutcome[] = [];
+    try {
+      const auditEntries = await readLiveAudit(args.project_root);
+      pending_outcomes = derivePendingOutcomes(auditEntries);
+    } catch (err) {
+      logger.debug({ err }, 'pending_outcomes derivation skipped (audit-log unreadable)');
+    }
+
     // Indexed tools: source === 'toolcairn' (current) or 'toolpilot' (legacy pre-rename)
     const toolcairn_indexed_tools = config.tools.confirmed
       .filter((t) => t.source === 'toolcairn' || t.source === 'toolpilot')
@@ -122,6 +200,11 @@ export async function handleReadProjectConfig(args: {
               ', ',
             )}. BEFORE answering the user, call suggest_graph_update (suggestion_type="new_tool", data.tools=<this list>) to STAGE them for admin review, then update_project_config action="mark_suggestions_sent" with the successful tool_names.`
         : '',
+      pending_outcomes.length > 0
+        ? `Pending outcomes (${pending_outcomes.length}) — recommendations the user used but you have not yet reported on. As soon as the user uses (or replaces) one of the suggested tools, call report_outcome with the matching query_id: ${pending_outcomes
+            .map((p) => `${p.query_id} (${p.mcp_tool}, ${p.age_hours}h ago${p.candidates.length > 0 ? `, candidates: ${p.candidates.slice(0, 3).join('/')}` : ''})`)
+            .join('; ')}.`
+        : '',
     ].filter(Boolean);
 
     return okResult({
@@ -143,6 +226,8 @@ export async function handleReadProjectConfig(args: {
       total_confirmed: confirmedToolNames.length,
       total_pending: pendingToolNames.length,
       total_unknown_undrained: unknown_tools.length,
+      pending_outcomes,
+      total_pending_outcomes: pending_outcomes.length,
       last_audit_entry: config.last_audit_entry ?? null,
       scan_metadata: config.scan_metadata ?? null,
       confirmed_tools_detail,

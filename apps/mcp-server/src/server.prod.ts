@@ -43,6 +43,7 @@ import {
   verifySuggestionSchema,
 } from '@toolcairn/tools-local';
 import { z } from 'zod';
+import { withAuditLog } from './middleware/audit-logger.js';
 import { withEventLogging } from './middleware/event-logger.js';
 import { runPostAuthInit } from './post-auth-init.js';
 
@@ -143,9 +144,14 @@ export async function addToolsToServer(server: McpServer): Promise<void> {
   logger.info({ user: creds.user_email }, 'Registering production tools');
 
   /**
-   * Composes event logging + error handling around a tool handler.
-   * Execution order: withEventLogging → withErrorHandling → handler
-   * This ensures events are always recorded even when errors occur.
+   * Composes event logging + audit logging + error handling around a tool handler.
+   * Execution order: withEventLogging → withAuditLog → withErrorHandling → handler
+   *
+   * - withErrorHandling normalises throws into error CallToolResults.
+   * - withAuditLog appends a `tool_call` entry to .toolcairn/audit-log.jsonl
+   *   (per-project, persistent) and can augment recommendation responses with
+   *   a `next_action` reminder pointing back to report_outcome.
+   * - withEventLogging streams timing/metadata to the engine event API.
    *
    * Uses Record<string, unknown> at the composition boundary — individual
    * handlers still receive the validated args from their own Zod schemas.
@@ -154,7 +160,10 @@ export async function addToolsToServer(server: McpServer): Promise<void> {
     args: Record<string, unknown>,
   ) => Promise<import('@modelcontextprotocol/sdk/types.js').CallToolResult>;
   function wrap(toolName: string, fn: AnyHandler) {
-    return withEventLogging(toolName, withErrorHandling(toolName, logger, fn));
+    return withEventLogging(
+      toolName,
+      withAuditLog(toolName, withErrorHandling(toolName, logger, fn)),
+    );
   }
 
   // ── LOCAL tools (zero network, run on user's machine) ──────────────────────
@@ -323,7 +332,8 @@ export async function addToolsToServer(server: McpServer): Promise<void> {
           ),
       }),
     },
-    async ({ action }) => {
+    wrap('toolcairn_auth', async (rawArgs) => {
+      const action = (rawArgs as { action: 'login' | 'status' | 'logout' }).action;
       if (action === 'status') {
         const c = await loadCredentials();
         const isAuth = c !== null && isTokenValid(c);
@@ -392,7 +402,7 @@ export async function addToolsToServer(server: McpServer): Promise<void> {
           isError: true,
         };
       }
-    },
+    }),
   );
 }
 

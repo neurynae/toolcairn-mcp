@@ -132,6 +132,13 @@ export interface UnknownInGraphTool {
   suggested_at?: string;
 }
 
+/**
+ * Outcome value mirrors the report_outcome MCP tool, embedded in audit entries
+ * when the call was a report_outcome so downstream readers (e.g. the pending
+ * outcomes derivation in read_project_config) can ack and drop matching entries.
+ */
+export type AuditOutcome = 'success' | 'failure' | 'replaced' | 'pending';
+
 export interface ConfigAuditEntry {
   action:
     | 'add_tool'
@@ -140,11 +147,43 @@ export interface ConfigAuditEntry {
     | 'add_evaluation'
     | 'init'
     | 'migrate'
-    | 'mark_suggestions_sent';
+    | 'mark_suggestions_sent'
+    /**
+     * v1.2.1+: every MCP tool invocation routed through the wrap() composer in
+     * the production MCP server is recorded as a `tool_call` audit entry. This
+     * gives the project a permanent, replayable timeline of every recommendation
+     * + every outcome, and lets read_project_config derive `pending_outcomes[]`.
+     */
+    | 'tool_call';
+  /**
+   * For config-mutation actions: the package name being acted on (or
+   * `__project__` / `__schema__` for project-wide events).
+   * For `tool_call` actions: a sensible label — usually the chosen/target tool
+   * name when the call concerns one specific package, otherwise the MCP tool
+   * name as a fallback. The authoritative MCP tool is `mcp_tool` below.
+   */
   tool: string;
   /** ISO timestamp. */
   timestamp: string;
   reason: string;
+
+  // ── Optional fields populated only for action='tool_call' ──────────────────
+  /** Name of the MCP tool that was invoked (e.g. 'search_tools', 'report_outcome'). */
+  mcp_tool?: string;
+  /** Search-session id — present on search_tools / get_stack / report_outcome / search_tools_respond. */
+  query_id?: string;
+  /** Wall-clock duration of the handler call. */
+  duration_ms?: number;
+  /** Handler outcome — 'error' iff the wrapped handler returned isError or threw. */
+  status?: 'ok' | 'error';
+  /** Outcome value reported via the report_outcome tool. */
+  outcome?: AuditOutcome;
+  /** Replacement target reported via report_outcome (action='replaced' case). */
+  replaced_by?: string;
+  /** Top recommendation candidates returned by search_tools / get_stack — used by pending_outcomes. */
+  candidates?: string[];
+  /** Light, non-PII summary metadata — same shape produced by the event-logger middleware. */
+  metadata?: Record<string, unknown>;
 }
 
 export interface ProjectLanguage {

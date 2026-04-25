@@ -33,5 +33,15 @@ Thumbs.db
 npm-debug.log*
 pnpm-debug.log*
 
-# ToolCairn runtime files (auto-created at startup — not source controlled)
-.toolcairn/
+# ToolCairn
+.toolcairn/events.jsonl
+.toolcairn/audit-log.jsonl
+.toolcairn/audit-log.archive.jsonl
+.toolcairn/config.json
+# toolcairn:start
+# ToolCairn
+.toolcairn/events.jsonl
+.toolcairn/audit-log.jsonl
+.toolcairn/audit-log.archive.jsonl
+.toolcairn/config.json
+# toolcairn:end
