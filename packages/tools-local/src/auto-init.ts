@@ -53,9 +53,15 @@ const logger = createMcpLogger({ name: '@toolcairn/tools:auto-init' });
 // .gitignore is different: users have their own ignore rules we mustn't
 // touch. We preserve those and refresh only our block in place.
 
-/** The exact block we append to .gitignore (kept minimal + human-readable). */
-const GITIGNORE_BLOCK =
-  '\n# ToolCairn\n.toolcairn/events.jsonl\n.toolcairn/audit-log.jsonl\n.toolcairn/audit-log.archive.jsonl\n.toolcairn/config.json\n';
+/**
+ * The exact block we append to .gitignore. v0.10.22+: ignore the whole
+ * `.toolcairn/` directory instead of enumerating individual files. Anything
+ * the server writes there (config.json, audit-log.jsonl, audit-log.archive.jsonl,
+ * tracker.html, events.jsonl, future additions) is auto-generated state — none
+ * of it belongs in version control. Whole-dir ignore is also future-proof: new
+ * file types added by later releases don't need .gitignore migrations.
+ */
+const GITIGNORE_BLOCK = '\n# ToolCairn\n.toolcairn/\n';
 
 export interface AutoInitInput {
   projectRoot: string;
