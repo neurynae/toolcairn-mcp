@@ -383,35 +383,45 @@ async function applySetupFiles(
 /**
  * CLAUDE.md / .cursorrules / AGENTS.md / etc.
  *
- * Server-owned file: every reconnect overwrites it with the current
- * CORE_RULES content. No keyword or marker detection — the MCP server is
- * the source of truth, and trying to merge user-authored prose into a
- * server-managed file just creates sentinel-drift bugs when the rules
- * heading changes.
+ * v0.10.20+: the toolcairn block is wrapped in
+ * `<!-- toolcairn:start -->` / `<!-- toolcairn:end -->` markers so it can
+ * coexist with the user's own primary instructions. Three cases:
  *
- * If you need to keep your own project notes, put them in a sibling file
- * (e.g. PROJECT_NOTES.md) that the server doesn't touch.
+ *   1. File missing — write the marker block as the file's only content.
+ *   2. File has markers — replace ONLY the bytes between them; the user's
+ *      content outside the markers is untouched.
+ *   3. File has unmanaged toolcairn content from v0.10.x (legacy heading
+ *      `## ToolCairn MCP — Tool Intelligence`) — strip from that heading
+ *      to end-of-file (the legacy block was always written at the end),
+ *      then append the new marker block.
+ *   4. File exists with unrelated content — append the marker block at
+ *      the end with one blank line of separation.
+ *
+ * The user's own primary instructions are never touched.
  */
 async function applyInstructionFile(
   abs: string,
   relPath: string,
-  content: string,
+  blockContent: string,
 ): Promise<AppliedSetupStep> {
   try {
-    // Skip the write when the file already holds the exact content we'd
-    // produce — saves the audit entry + filesystem churn on reconnects.
+    let body = '';
+    let exists = false;
     if (await fileExists(abs)) {
-      const current = await readFile(abs, 'utf-8');
-      if (current === content) {
-        return {
-          file: relPath,
-          action: 'append-or-create',
-          applied: false,
-          reason: 'content already up to date',
-        };
-      }
+      body = await readFile(abs, 'utf-8');
+      exists = true;
     }
-    await writeFileAtomic(abs, content, 'utf-8');
+
+    const next = mergeInstructionBlock(body, exists, blockContent);
+    if (exists && next === body) {
+      return {
+        file: relPath,
+        action: 'append-or-create',
+        applied: false,
+        reason: 'content already up to date',
+      };
+    }
+    await writeFileAtomic(abs, next, 'utf-8');
     return { file: relPath, action: 'append-or-create', applied: true };
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
@@ -419,6 +429,46 @@ async function applyInstructionFile(
     return { file: relPath, action: 'append-or-create', applied: false, reason };
   }
 }
+
+/**
+ * Compute the new file body for an instruction file given the existing
+ * body and the marker-fenced toolcairn block. See `applyInstructionFile`
+ * for the four cases this handles.
+ */
+export function mergeInstructionBlock(body: string, exists: boolean, blockContent: string): string {
+  if (!exists || body.length === 0) return blockContent;
+
+  // Case 2: file already has the managed block — replace it in place.
+  const startIdx = body.indexOf(INSTRUCTION_BLOCK_START);
+  const endIdx = body.indexOf(INSTRUCTION_BLOCK_END);
+  if (startIdx >= 0 && endIdx > startIdx) {
+    const before = body.slice(0, startIdx);
+    const after = body.slice(endIdx + INSTRUCTION_BLOCK_END.length);
+    return before + blockContent + after;
+  }
+
+  // Case 3: file has the legacy unmanaged heading — strip from there to EOF
+  // and append the new marker block. Migration only happens once per file.
+  const legacyIdx = body.indexOf(LEGACY_HEADING);
+  if (legacyIdx >= 0) {
+    const trimmed = body.slice(0, legacyIdx).replace(/\s+$/, '');
+    return trimmed + (trimmed.length > 0 ? '\n\n' : '') + blockContent + '\n';
+  }
+
+  // Case 4: file has unrelated content — append the block with one blank
+  // line of separation, preserving the user's primary instructions.
+  const trimmed = body.replace(/\s+$/, '');
+  return trimmed + '\n\n' + blockContent + '\n';
+}
+
+// Re-imported here so the helper above stays a pure function. The block
+// markers + legacy heading live in the templates module so the writer and
+// the content emitter can never drift out of sync.
+import {
+  INSTRUCTION_BLOCK_END,
+  INSTRUCTION_BLOCK_START,
+  LEGACY_HEADING,
+} from './templates/agent-instructions.js';
 
 /**
  * .mcp.json (or opencode.json for OpenCode agents).

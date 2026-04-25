@@ -38,48 +38,72 @@ const TOOLCAIRN_MCP_ENTRY = IS_WINDOWS
       },
     };
 
-const CORE_RULES = `
-## ToolCairn MCP — Tool Intelligence
+/**
+ * Auxiliary tooling guidance, written as a marker-fenced block so it can be
+ * appended to ANY existing agent-instructions file without clobbering the
+ * user's own primary instructions. On reconnect the writer (auto-init.ts)
+ * looks for the markers and replaces ONLY the block between them; outside
+ * the block, the user's content is untouched.
+ *
+ * Style choices:
+ *   - `###` heading (sub-section, not a top-level `##` competing with the
+ *     user's primary headings).
+ *   - HTML comment markers (Markdown-safe, render as nothing).
+ *   - Imperative decision-flow steps (1 → 5) ahead of the reference table —
+ *     the agent should know WHEN to call WHICH tool before knowing WHAT
+ *     each tool does.
+ *   - No fluff: every line carries a tool name or a constraint.
+ */
+const TOOLCAIRN_BLOCK_START = '<!-- toolcairn:start -->';
+const TOOLCAIRN_BLOCK_END = '<!-- toolcairn:end -->';
 
-Graph-backed catalog of tools with health, compatibility, and issue data. Always consult before recommending a tool/library/framework. The server owns \`.toolcairn/config.json\` + \`audit-log.jsonl\` under a cross-process lock — never read/write these files directly; use the MCP tools.
+const CORE_RULES = `${TOOLCAIRN_BLOCK_START}
+<!-- ToolCairn MCP — 15-tool flow guide. Managed by @neurynae/toolcairn-mcp;
+     do not edit between markers. -->
 
-### First-turn protocol
+### ToolCairn — when to call which tool
 
-1. \`read_project_config({ project_root })\`. If \`status:"not_initialized"\`, call \`toolcairn_init\`. (Auto-init usually ran during \`toolcairn_auth\` already.)
-2. **If \`unknown_tools[]\` is non-empty** — BEFORE replying to the user:
-   - \`suggest_graph_update({ suggestion_type:"new_tool", data:{ tools: <unknown_tools array> } })\` — entries are STAGED for admin review, NOT live.
-   - \`update_project_config({ action:"mark_suggestions_sent", data:{ tool_names: <names that staged ok> } })\`.
-   - Repeat per root in monorepos (each has its own list).
+Always consult ToolCairn before recommending a library / CLI / framework.
 
-### Tool reference
+**Session entry.** Call \`toolcairn_auth\` once. The auth response auto-runs \`toolcairn_init\` for every project root under CWD; call \`toolcairn_init\` explicitly only when \`read_project_config\` returns \`not_initialized\`.
 
-| Tool | Trigger |
-|------|---------|
-| \`classify_prompt\` | User describes a task — decide whether tool search is needed |
-| \`refine_requirement\` | Decompose a use case into searchable sub-needs (required input for \`get_stack\`) |
-| \`search_tools\` | Find the best tool for one specific need |
-| \`search_tools_respond\` | Submit clarification answers for an in-progress search session |
-| \`get_stack\` | Build a version-compatible multi-layer stack for a use case |
-| \`compare_tools\` | Head-to-head comparison of two tools |
-| \`check_compatibility\` | Version-aware compatibility check between two tools |
-| \`check_issue\` | LAST RESORT — known-bug lookup after 4+ retries + docs review |
-| \`verify_suggestion\` | Validate agent-picked tool names against the graph |
-| \`report_outcome\` | Fire-and-forget feedback after using a recommended tool |
-| \`suggest_graph_update\` | Stage a new tool / edge / use-case for admin review (never writes live) |
-| \`toolcairn_init\` | Manual project re-scan (auto-init usually covers it) |
-| \`read_project_config\` | Load project snapshot (confirmed, pending, unknown, stale, metadata) |
-| \`update_project_config\` | Mutate confirmed tools or mark unknown suggestions sent |
-| \`toolcairn_auth\` | Login / status / logout for ToolCairn credentials |
+**Before answering ANY user request — per project root**
 
-### Rules
+1. \`read_project_config\` — load the snapshot.
+2. Drain non-empty \`unknown_tools[]\`: \`suggest_graph_update\` (stages them for admin review) → \`update_project_config\` action \`mark_suggestions_sent\`.
+3. Each \`pending_outcomes[]\` entry still owes a \`report_outcome\` — fire it as soon as the underlying tool is used.
 
-- Never recommend a tool that isn't in \`confirmed_tools\` without first hitting \`search_tools\` / \`get_stack\`.
-- After selecting a tool: \`update_project_config({ action:"add_tool", tool_name, data: {...} })\`. Pass \`data.source:"non_oss"\` for proprietary picks.
-- After using a tool (success or failure): \`report_outcome\`.
-- Use \`check_issue\` only after docs + 4 retries — it's network-heavy.
-- Confirmed tools in config.json carry graph enrichment: \`description\`, \`license\`, \`homepage_url\`, \`docs.{readme_url,docs_url,api_url,changelog_url}\`, and \`package_managers[]\` with install commands. Prefer these over re-fetching.
-- Suggestions are STAGED; admin approval gates live-graph promotion.
-`;
+**Use the on-disk state, not just MCP tools**
+
+\`.toolcairn/\` is a local knowledge base — read it freely, never write directly (mutations go through \`update_project_config\`).
+
+- \`.toolcairn/config.json\` → \`tools.confirmed[]\` carries every tool's full enrichment: \`description\`, \`license\`, \`homepage_url\`, \`docs.{readme_url,docs_url,api_url,changelog_url}\`, \`package_managers[].install_commands[]\`, \`version\` (resolved from the lockfile), \`categories\`, \`locations[]\` (workspaces + manifest paths). When the user asks "how do I install X?", "where are X's docs?", "what version of X are we on?", "where is X used?" — read config.json. Do NOT call \`search_tools\` or hit the network.
+- \`tools.unknown_in_graph[]\` tracks which candidates still owe \`suggest_graph_update\` (\`suggested:true\` is already drained).
+- \`project.subprojects[]\` + per-tool \`locations[]\` reveal monorepo layout — pick the right \`project_root\` before mutating.
+- \`.toolcairn/audit-log.jsonl\` is the append-only journal — tail it to recover a recent \`query_id\` or de-dup against an identical recent search.
+
+**Per user request**
+
+1. \`classify_prompt\` to decide if ToolCairn is needed at all. Branch on the returned classification:
+2. \`tool_discovery\` (one specific need) → \`search_tools\`. If the response asks clarification questions → \`search_tools_respond\` (loop until complete).
+3. \`stack_building\` (multi-layer "build me a …") → \`refine_requirement\` → feed its \`sub_needs\` into \`get_stack\`.
+4. \`tool_comparison\` ("X vs Y") → \`compare_tools\`.
+5. Anything else → answer directly, ToolCairn isn't the right surface.
+
+**Validate + persist (after the agent picks tools)**
+
+1. \`verify_suggestion\` to confirm every pick exists in the graph; not-indexed picks route through \`suggest_graph_update\` instead of \`add_tool\`.
+2. \`check_compatibility\` between picks when versions are uncertain.
+3. \`update_project_config\` action \`add_tool\` for each accepted tool — record the \`query_id\` and \`chosen_reason\`.
+
+**Close the loop**
+
+- \`report_outcome\` after the user actually uses (or replaces) each tool. Fire-and-forget; never await.
+
+**Last resort.** \`check_issue\` for known-bug lookup, ONLY after 4+ retries on the user's actual error and a docs review.
+
+**Tracker.** Open \`.toolcairn/tracker.html\` in any browser — server-rewritten, auto-refreshes, shows every tool call + pending outcomes in real time.
+${TOOLCAIRN_BLOCK_END}`;
 
 export function getClaudeInstructions(): InstructionTemplate {
   return {
@@ -108,8 +132,8 @@ export function getWindsurfInstructions(): InstructionTemplate {
 export function getCopilotInstructions(): InstructionTemplate {
   return {
     file_path: '.github/copilot-instructions.md',
-    mode: 'create',
-    content: `# GitHub Copilot Instructions\n${CORE_RULES}`,
+    mode: 'append',
+    content: CORE_RULES,
   };
 }
 
@@ -132,10 +156,21 @@ export function getOpenCodeInstructions(): InstructionTemplate {
 export function getGenericInstructions(): InstructionTemplate {
   return {
     file_path: 'AI_INSTRUCTIONS.md',
-    mode: 'create',
-    content: `# AI Assistant Instructions\n${CORE_RULES}`,
+    mode: 'append',
+    content: CORE_RULES,
   };
 }
+
+/** Marker constants shared with the writer in `auto-init.ts`. */
+export const INSTRUCTION_BLOCK_START = TOOLCAIRN_BLOCK_START;
+export const INSTRUCTION_BLOCK_END = TOOLCAIRN_BLOCK_END;
+/**
+ * Pre-marker (v0.10.x) heading the writer matches when migrating an old
+ * unmanaged file to the new managed-block layout. If a CLAUDE.md still
+ * starts the toolcairn section with this exact heading we trim from there
+ * to end-of-file before appending the marker block.
+ */
+export const LEGACY_HEADING = '## ToolCairn MCP — Tool Intelligence';
 
 export function getInstructionsForAgent(agent: AgentType): InstructionTemplate {
   switch (agent) {
