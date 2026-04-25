@@ -323,6 +323,10 @@ async function markSuggestedInConfig(
       action: 'mark_suggestions_sent',
       tool: `__auto_submit__:${toolNames.length}`,
       reason: 'Server auto-pushed unknown_in_graph tools to suggest_graph_update',
+      metadata: {
+        tool_names: toolNames,
+        tool_count: toolNames.length,
+      },
     },
   );
 

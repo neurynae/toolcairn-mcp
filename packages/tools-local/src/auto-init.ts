@@ -171,6 +171,18 @@ export async function autoInitProject(input: AutoInitInput): Promise<AutoInitRes
     reason:
       reason ??
       `Auto-init: scanned ${scan.tools.length} tools across ${scan.scan_metadata.ecosystems_scanned.length} ecosystems; ${unknownFromScan.length} candidate(s) for graph submission.`,
+    metadata: {
+      project_name: scan.name,
+      tools_scanned: scan.tools.length,
+      tools_resolved: scan.scan_metadata.tools_resolved,
+      tools_unresolved: scan.scan_metadata.tools_unresolved,
+      unknown_in_graph: unknownFromScan.length,
+      ecosystems_scanned: scan.scan_metadata.ecosystems_scanned,
+      languages: scan.languages.map((l) => l.name),
+      frameworks: scan.frameworks.map((f) => f.name),
+      scan_duration_ms: scan.scan_metadata.duration_ms,
+      batch_resolve_failed: batchResolveFailed,
+    },
   };
 
   const { config, audit_entry, bootstrapped, migrated } = await mutateConfig(

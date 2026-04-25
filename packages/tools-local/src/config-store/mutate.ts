@@ -56,6 +56,7 @@ export async function mutateConfig(
   const preExisted = await fileExists(configPath);
   await ensureLockableDir(projectRoot);
 
+  const startedAt = Date.now();
   const release = await lockfile.lock(configPath, {
     stale: 10_000,
     retries: { retries: 5, minTimeout: 50, factor: 2, maxTimeout: 500 },
@@ -102,9 +103,17 @@ export async function mutateConfig(
     // 3. Caller mutation.
     await mutator(config);
 
-    // 4. Stamp audit entry.
+    // 4. Stamp audit entry — measure handler duration so config-mutation
+    //    rows in audit-log.jsonl carry the same timing signal as tool_call
+    //    rows from the MCP middleware.
     const now = new Date().toISOString();
-    const entry: ConfigAuditEntry = { ...audit, timestamp: now };
+    const duration_ms = Date.now() - startedAt;
+    const entry: ConfigAuditEntry = {
+      ...audit,
+      timestamp: now,
+      duration_ms: audit.duration_ms ?? duration_ms,
+      status: audit.status ?? 'ok',
+    };
     config.last_audit_entry = entry;
     config.version = '1.2';
 

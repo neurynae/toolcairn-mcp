@@ -18,6 +18,8 @@ export async function handleUpdateProjectConfig(args: {
   /** Required for every action EXCEPT mark_suggestions_sent (uses data.tool_names[]). */
   tool_name?: string;
   data?: Record<string, unknown>;
+  /** Optional ToolCairn search-session id, threaded through to the audit entry. */
+  query_id?: string;
 }) {
   try {
     logger.info(
@@ -56,6 +58,8 @@ export async function handleUpdateProjectConfig(args: {
         (data.reason as string | undefined) ??
         (data.chosen_reason as string | undefined) ??
         defaultReasonFor(args.action),
+      ...(args.query_id ? { query_id: args.query_id as string } : {}),
+      metadata: buildUpdateMetadata(args, data),
     };
 
     const { config, audit_entry, bootstrapped } = await mutateConfig(
@@ -175,6 +179,48 @@ export async function handleUpdateProjectConfig(args: {
     logger.error({ err: e }, 'update_project_config failed');
     return errResult('update_config_error', e instanceof Error ? e.message : String(e));
   }
+}
+
+/**
+ * Build per-action `metadata` for the audit entry — captures the most useful
+ * non-PII signal so audit-log.jsonl rows aren't all-null beyond `action`/`tool`.
+ */
+function buildUpdateMetadata(
+  args: { action: UpdateAction; tool_name?: string; data?: Record<string, unknown> },
+  data: Record<string, unknown>,
+): Record<string, unknown> {
+  const meta: Record<string, unknown> = { config_action: args.action };
+  switch (args.action) {
+    case 'add_tool': {
+      if (args.tool_name) meta.tool_name = args.tool_name;
+      if (typeof data.source === 'string') meta.source = data.source;
+      if (typeof data.version === 'string') meta.version = data.version;
+      if (typeof data.github_url === 'string') meta.github_url = data.github_url;
+      if (Array.isArray(data.alternatives_considered)) {
+        meta.alternatives_count = data.alternatives_considered.length;
+      }
+      break;
+    }
+    case 'remove_tool':
+    case 'update_tool': {
+      if (args.tool_name) meta.tool_name = args.tool_name;
+      if (typeof data.version === 'string') meta.version = data.version;
+      break;
+    }
+    case 'add_evaluation': {
+      if (args.tool_name) meta.tool_name = args.tool_name;
+      break;
+    }
+    case 'mark_suggestions_sent': {
+      const names = Array.isArray(data.tool_names)
+        ? (data.tool_names as unknown[]).filter((t): t is string => typeof t === 'string')
+        : [];
+      meta.tool_names = names;
+      meta.tool_count = names.length;
+      break;
+    }
+  }
+  return meta;
 }
 
 function defaultReasonFor(action: UpdateAction): string {
