@@ -1,5 +1,3 @@
-import { homedir } from 'node:os';
-import { join } from 'node:path';
 import pino, { type Logger, type LoggerOptions } from 'pino';
 import { errorSerializer } from './serializers.js';
 
@@ -38,12 +36,13 @@ export interface CreateLoggerOptions {
  * IMPORTANT: The MCP JSON-RPC protocol communicates over stdout.
  * All logging MUST go to stderr (fd=2) to avoid corrupting the protocol stream.
  *
- * In production the logger writes to two targets:
- * 1. stderr — all messages at the configured level (visible via `npx toolcairn-mcp 2>/dev/null`)
- * 2. ~/.toolcairn/logs/mcp-error-YYYY-MM-DD.log — warn+ messages for post-hoc debugging
- *
- * In development (NODE_ENV !== 'production') the file transport is omitted to
- * avoid cluttering the user's home directory during testing.
+ * Implementation note (v0.10.16+):
+ * The logger writes synchronously to `process.stderr`. We deliberately do NOT
+ * use `pino.transport({...})` (which spawns a worker thread loading
+ * `pino/file` at runtime) because the worker entry can't be statically
+ * bundled by tsup — that path forced npx to install pino's transitive
+ * tree on every fresh `@latest` resolve, blowing past Claude Code's MCP
+ * startup window. Synchronous stderr writes are bundle-safe and faster.
  */
 export function createMcpLogger(opts: CreateLoggerOptions): Logger {
   const level =
@@ -69,26 +68,8 @@ export function createMcpLogger(opts: CreateLoggerOptions): Logger {
     },
   };
 
-  const isProd = process.env.NODE_ENV === 'production';
-
-  if (!isProd) {
-    // Dev: stderr only, no file pollution
-    return pino({ ...pinoOpts, transport: { target: 'pino/file', options: { destination: 2 } } });
-  }
-
-  // Production: stderr + persistent error log file
-  const logDir = join(homedir(), '.toolcairn', 'logs');
-  const today = new Date().toISOString().slice(0, 10);
-  const errorLogPath = join(logDir, `mcp-error-${today}.log`);
-
-  const transport = pino.transport({
-    targets: [
-      { target: 'pino/file', options: { destination: 2 }, level },
-      { target: 'pino/file', options: { destination: errorLogPath, mkdir: true }, level: 'warn' },
-    ],
-  });
-
-  return pino(pinoOpts, transport);
+  // Sync write to stderr — no worker thread, no dynamic loader.
+  return pino(pinoOpts, process.stderr);
 }
 
 /** Alias for convenience — use createMcpLogger as the standard factory in MCP packages */

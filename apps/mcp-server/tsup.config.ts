@@ -24,9 +24,10 @@ export default defineConfig({
   // before the MCP startup timeout fires; halving the download fits cold
   // reconnects inside Claude Code's ~10s window.
   sourcemap: false,
-  // Drop comments from the bundle (~5-10% additional shrink) since the
-  // bundled source isn't human-read.
-  minify: false,
+  // Minify the bundle — drops comments + whitespace + dead code.
+  // The bundled output isn't human-read at runtime; smaller = faster
+  // tarball download.
+  minify: true,
   clean: true,
   // tsup's built-in shims for __dirname/__filename (ESM doesn't have them).
   shims: true,
@@ -37,22 +38,19 @@ export default defineConfig({
   banner: {
     js: "import { createRequire as __nodeCreateRequire } from 'module'; const require = __nodeCreateRequire(import.meta.url);",
   },
-  // External = installed by npm at runtime (listed in package.json dependencies).
-  // Do NOT bundle these — let Node.js resolve them normally.
-  // @toolcairn/db is lazy-imported in event-logger.ts (optional DB tracking).
-  // Marking external prevents @prisma/client from being bundled at all.
-  external: [
-    '@modelcontextprotocol/sdk',
-    'pino',
-    'zod',
-    'write-file-atomic',
-    'proper-lockfile',
-    'smol-toml',
-    'fast-xml-parser',
-    'yaml',
-  ],
-  // Bundle all internal workspace packages (not on npm)
-  noExternal: [/@toolcairn\/.*/],
+  // Zero externals — every runtime dep is bundled into dist/index.js.
+  // Why: with `@latest` in .mcp.json and a fresh publish, npx resolves
+  // the version, downloads the tarball, then npm-installs the dep tree.
+  // 116 transitive packages took ~29s end-to-end on a slow connection —
+  // way past Claude Code's MCP startup window. Bundling everything
+  // collapses install to a single tarball extract: 1 file, 0 deps,
+  // sub-second cold start.
+  //
+  // Note: pino was switched to synchronous stderr writes in v0.10.16
+  // (no `pino.transport({...})` worker thread) so it can be statically
+  // bundled here.
+  external: [],
+  noExternal: [/.*/],
   // Ensure node: imports work
   platform: 'node',
 });
