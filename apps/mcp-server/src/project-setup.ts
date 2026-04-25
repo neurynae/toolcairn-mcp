@@ -19,7 +19,7 @@
  * config.json at the correct location via its own cross-process lock.
  */
 
-import { access, mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { platform, type } from 'node:os';
 import { join } from 'node:path';
 import { createMcpLogger } from '@toolcairn/errors';
@@ -46,17 +46,16 @@ function detectOs(): { platform: string; label: string } {
 }
 
 /**
- * Normalise an absolute file path to use forward slashes.
- * Required when embedding the path in a file:// URL inside tracker.html.
- * On Unix this is a no-op; on Windows it converts C:\foo\bar → C:/foo/bar.
- */
-function toFileUrl(absPath: string): string {
-  return absPath.replace(/\\/g, '/');
-}
-
-/**
- * Ensure `.toolcairn/tracker.html` exists in `projectRoot`. No-op if already present.
- * Does NOT write `config.json` or `events.jsonl` — handlers own those.
+ * Ensure `.toolcairn/tracker.html` exists in `projectRoot`. The tracker is
+ * a self-contained dashboard the user opens in a browser; it picks up audit
+ * logs at runtime via the File System Access API or a directory <input>
+ * fallback, so no path interpolation is needed at write time.
+ *
+ * v0.10.18+: the tracker is regenerated unconditionally on every server
+ * start (not gated on createIfAbsent) so previously-deployed stale content
+ * gets replaced. Old single-project trackers from v0.10.x relied on a
+ * separate events.jsonl file that was almost never written; the new
+ * tracker reads `audit-log.jsonl` directly from one or more project roots.
  */
 export async function ensureProjectSetup(projectRoot = process.cwd()): Promise<void> {
   const os = detectOs();
@@ -67,14 +66,10 @@ export async function ensureProjectSetup(projectRoot = process.cwd()): Promise<v
 
   const dir = join(projectRoot, '.toolcairn');
   const trackerPath = join(dir, 'tracker.html');
-  const eventsPathAbs = join(dir, 'events.jsonl');
-
-  // tracker.html embeds the events path in a file:// URL — must use forward slashes
-  const eventsPathForUrl = toFileUrl(eventsPathAbs);
 
   try {
     await mkdir(dir, { recursive: true });
-    await createIfAbsent(trackerPath, generateTrackerHtml(eventsPathForUrl), 'tracker.html');
+    await writeFile(trackerPath, generateTrackerHtml(), 'utf-8');
     logger.info({ dir, os: os.label }, '.toolcairn tracker ready');
   } catch (e) {
     // Non-fatal — server still starts even if setup fails (read-only fs, perms, etc.)
@@ -82,15 +77,5 @@ export async function ensureProjectSetup(projectRoot = process.cwd()): Promise<v
       { err: e, dir, os: os.label },
       'tracker.html setup failed — continuing (config.json still bootstrapped by handlers)',
     );
-  }
-}
-
-async function createIfAbsent(filePath: string, content: string, label: string): Promise<void> {
-  try {
-    await access(filePath);
-    logger.debug({ file: label }, 'Already exists — skipping');
-  } catch {
-    await writeFile(filePath, content, 'utf-8');
-    logger.info({ file: label }, 'Created');
   }
 }
