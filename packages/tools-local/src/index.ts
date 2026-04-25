@@ -26,7 +26,9 @@ export { handleUpdateProjectConfig } from './handlers/update-project-config.js';
 
 // Auto-init pipeline — shared by handler + auth-time server wiring
 export {
+  applyWorkspaceInstructions,
   autoInitProject,
+  mergeInstructionBlock,
   type AutoInitInput,
   type AutoInitResult,
   type AutoInitScanSummary,

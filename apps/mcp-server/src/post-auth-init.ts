@@ -20,12 +20,13 @@
  * submissions from the agent are safe — no double-staging.
  */
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { config as mcpConfig } from '@toolcairn/config';
 import { createMcpLogger } from '@toolcairn/errors';
 import { ToolCairnClient, loadCredentials } from '@toolcairn/remote';
 import {
   type AutoInitResult,
+  applyWorkspaceInstructions,
   autoInitProject,
   discoverProjectRoots,
   mutateConfig,
@@ -203,6 +204,25 @@ export async function runPostAuthInit(
           'Auto-push to suggest_graph_update failed — agent directive remains as fallback',
         );
       }
+    }
+  }
+
+  // Multi-root layout: the user's CWD is a workspace parent (no manifest)
+  // holding sibling repos. Discovery never returns CWD in `roots[]` for that
+  // layout, so the workspace-level CLAUDE.md / .cursorrules / AGENTS.md
+  // never gets the toolcairn auxiliary block. Run an instruction-file-only
+  // merge for CWD when it isn't already a discovered root, so agents
+  // launched at the workspace level pick up the same flow guide.
+  const cwdAbs = resolve(cwd);
+  if (!roots.includes(cwdAbs)) {
+    try {
+      const step = await applyWorkspaceInstructions(cwdAbs, agent);
+      logger.info(
+        { cwd: cwdAbs, file: step.file, applied: step.applied, reason: step.reason },
+        'Workspace-level instruction-file pass complete',
+      );
+    } catch (err) {
+      logger.debug({ err, cwd: cwdAbs }, 'Workspace-level instruction merge skipped (best-effort)');
     }
   }
 

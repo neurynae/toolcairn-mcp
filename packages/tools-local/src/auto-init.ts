@@ -399,6 +399,21 @@ async function applySetupFiles(
  *
  * The user's own primary instructions are never touched.
  */
+/**
+ * Workspace-level instruction-file merge. Used by `runPostAuthInit` to ensure
+ * the agent-instructions file at the user's CWD gets the toolcairn block even
+ * when CWD itself isn't a discovered project root (e.g. a parent dir holding
+ * sibling repos). Only the instruction file is touched — no `.toolcairn/`
+ * scaffolding, no scan, no audit entry — because there's no project to scan.
+ */
+export async function applyWorkspaceInstructions(
+  dir: string,
+  agent: AgentType,
+): Promise<AppliedSetupStep> {
+  const tpl = getInstructionsForAgent(agent);
+  return applyInstructionFile(resolve(dir, tpl.file_path), tpl.file_path, tpl.content);
+}
+
 async function applyInstructionFile(
   abs: string,
   relPath: string,
