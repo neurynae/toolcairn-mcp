@@ -18,11 +18,7 @@ const STALENESS_THRESHOLD_DAYS = 90;
 const PENDING_OUTCOME_TTL_DAYS = 7;
 
 /** MCP tools whose successful response carries a query_id agents should report on. */
-const RECOMMENDATION_MCP_TOOLS = new Set([
-  'search_tools',
-  'search_tools_respond',
-  'get_stack',
-]);
+const RECOMMENDATION_MCP_TOOLS = new Set(['search_tools', 'search_tools_respond', 'get_stack']);
 
 interface PendingOutcome {
   query_id: string;
@@ -202,7 +198,10 @@ export async function handleReadProjectConfig(args: {
         : '',
       pending_outcomes.length > 0
         ? `Pending outcomes (${pending_outcomes.length}) — recommendations the user used but you have not yet reported on. As soon as the user uses (or replaces) one of the suggested tools, call report_outcome with the matching query_id: ${pending_outcomes
-            .map((p) => `${p.query_id} (${p.mcp_tool}, ${p.age_hours}h ago${p.candidates.length > 0 ? `, candidates: ${p.candidates.slice(0, 3).join('/')}` : ''})`)
+            .map(
+              (p) =>
+                `${p.query_id} (${p.mcp_tool}, ${p.age_hours}h ago${p.candidates.length > 0 ? `, candidates: ${p.candidates.slice(0, 3).join('/')}` : ''})`,
+            )
             .join('; ')}.`
         : '',
     ].filter(Boolean);

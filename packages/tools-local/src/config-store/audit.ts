@@ -4,8 +4,8 @@ import type { ConfigAuditEntry } from '@toolcairn/types';
 import lockfile from 'proper-lockfile';
 import writeFileAtomic from 'write-file-atomic';
 import { fileExists } from '../discovery/util/fs.js';
-import { emptySkeleton } from './skeleton.js';
 import { joinAuditArchivePath, joinAuditPath, joinConfigDir, joinConfigPath } from './paths.js';
+import { emptySkeleton } from './skeleton.js';
 
 const logger = createMcpLogger({ name: '@toolcairn/tools:audit-log' });
 

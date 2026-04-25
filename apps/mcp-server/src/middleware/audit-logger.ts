@@ -20,8 +20,8 @@ import { existsSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { createMcpLogger } from '@toolcairn/errors';
-import type { AuditOutcome, ConfigAuditEntry } from '@toolcairn/types';
 import { appendToolCallAudit } from '@toolcairn/tools-local';
+import type { AuditOutcome, ConfigAuditEntry } from '@toolcairn/types';
 
 const logger = createMcpLogger({ name: '@toolcairn/mcp-server:audit-logger' });
 
@@ -212,10 +212,7 @@ function pickToolLabel(
   return `__call__:${toolName}`;
 }
 
-function pickOutcome(
-  toolName: string,
-  args: Record<string, unknown>,
-): AuditOutcome | undefined {
+function pickOutcome(toolName: string, args: Record<string, unknown>): AuditOutcome | undefined {
   if (toolName !== 'report_outcome') return undefined;
   const v = args.outcome;
   if (v === 'success' || v === 'failure' || v === 'replaced' || v === 'pending') return v;
