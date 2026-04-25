@@ -30,11 +30,51 @@ const ARCHIVE_BATCH = 2500;
 export async function appendAudit(projectRoot: string, entry: ConfigAuditEntry): Promise<void> {
   await mkdir(joinConfigDir(projectRoot), { recursive: true });
   const auditPath = joinAuditPath(projectRoot);
-  const line = `${JSON.stringify(entry)}\n`;
+  const line = `${JSON.stringify(normalizeAuditEntry(entry))}\n`;
   await appendFile(auditPath, line, 'utf-8');
 
   // Rotation check — counts lines in-place; cheap for files under a few MB.
   await rotateIfNeeded(projectRoot, auditPath);
+}
+
+/**
+ * Canonical audit-line shape: every JSONL entry — whether emitted by a config
+ * mutation (`init`, `add_tool`, `migrate`, …) or by the per-tool-call
+ * middleware (`tool_call`) — exposes the same set of top-level keys, with
+ * `null` placeholders where a field does not apply to that action. This makes
+ * `audit-log.jsonl` cleanly grep/jq-able and keeps the schema uniform across
+ * the parent dir and every sub-root in a multi-project workspace.
+ */
+interface NormalizedAuditEntry {
+  action: ConfigAuditEntry['action'];
+  tool: string;
+  timestamp: string;
+  reason: string;
+  mcp_tool: string | null;
+  query_id: string | null;
+  duration_ms: number | null;
+  status: 'ok' | 'error';
+  outcome: ConfigAuditEntry['outcome'] | null;
+  replaced_by: string | null;
+  candidates: string[] | null;
+  metadata: Record<string, unknown> | null;
+}
+
+function normalizeAuditEntry(entry: ConfigAuditEntry): NormalizedAuditEntry {
+  return {
+    action: entry.action,
+    tool: entry.tool,
+    timestamp: entry.timestamp,
+    reason: entry.reason,
+    mcp_tool: entry.mcp_tool ?? null,
+    query_id: entry.query_id ?? null,
+    duration_ms: entry.duration_ms ?? null,
+    status: entry.status ?? 'ok',
+    outcome: entry.outcome ?? null,
+    replaced_by: entry.replaced_by ?? null,
+    candidates: entry.candidates ?? null,
+    metadata: entry.metadata ?? null,
+  };
 }
 
 /**
@@ -48,7 +88,7 @@ export async function bulkAppendAudit(
   if (entries.length === 0) return;
   await mkdir(joinConfigDir(projectRoot), { recursive: true });
   const auditPath = joinAuditPath(projectRoot);
-  const payload = entries.map((e) => `${JSON.stringify(e)}\n`).join('');
+  const payload = entries.map((e) => `${JSON.stringify(normalizeAuditEntry(e))}\n`).join('');
   await appendFile(auditPath, payload, 'utf-8');
   await rotateIfNeeded(projectRoot, auditPath);
 }
