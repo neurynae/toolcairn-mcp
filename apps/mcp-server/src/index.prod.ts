@@ -34,6 +34,7 @@ import { z } from 'zod';
 import { runPostAuthInit } from './post-auth-init.js';
 import { ensureProjectSetup } from './project-setup.js';
 import { addToolsToServer, buildProdServer } from './server.prod.js';
+import { writeTrackerHtml } from './tools/write-tracker.js';
 import { createTransport } from './transport.js';
 
 process.env.TOOLPILOT_MODE = 'production';
@@ -157,7 +158,7 @@ async function main(): Promise<void> {
   // replacement — no silent flip to non_oss.
   if (authenticated) {
     void runPostAuthInit({ agent: 'claude' })
-      .then((summary) => {
+      .then(async (summary) => {
         logger.info(
           {
             roots: summary.roots_discovered.length,
@@ -166,6 +167,11 @@ async function main(): Promise<void> {
           },
           'Background auto-refresh complete',
         );
+        // Refresh tracker.html for every root so the dashboard is current
+        // even before the user fires their first MCP tool call.
+        for (const root of summary.roots_discovered) {
+          await writeTrackerHtml(root);
+        }
       })
       .catch((err: unknown) => {
         logger.warn({ err }, 'Background auto-refresh failed — config left as-is');

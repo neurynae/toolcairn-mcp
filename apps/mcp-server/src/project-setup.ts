@@ -19,11 +19,11 @@
  * config.json at the correct location via its own cross-process lock.
  */
 
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir } from 'node:fs/promises';
 import { platform, type } from 'node:os';
 import { join } from 'node:path';
 import { createMcpLogger } from '@toolcairn/errors';
-import { generateTrackerHtml } from './tools/generate-tracker.js';
+import { writeTrackerHtml } from './tools/write-tracker.js';
 
 const logger = createMcpLogger({ name: '@toolcairn/mcp-server:project-setup' });
 
@@ -65,11 +65,10 @@ export async function ensureProjectSetup(projectRoot = process.cwd()): Promise<v
   );
 
   const dir = join(projectRoot, '.toolcairn');
-  const trackerPath = join(dir, 'tracker.html');
 
   try {
     await mkdir(dir, { recursive: true });
-    await writeFile(trackerPath, generateTrackerHtml(), 'utf-8');
+    await writeTrackerHtml(projectRoot);
     logger.info({ dir, os: os.label }, '.toolcairn tracker ready');
   } catch (e) {
     // Non-fatal — server still starts even if setup fails (read-only fs, perms, etc.)

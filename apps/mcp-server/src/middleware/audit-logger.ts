@@ -22,6 +22,7 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { createMcpLogger } from '@toolcairn/errors';
 import { appendToolCallAudit } from '@toolcairn/tools-local';
 import type { AuditOutcome, ConfigAuditEntry } from '@toolcairn/types';
+import { scheduleTrackerRewrite } from '../tools/write-tracker.js';
 
 const logger = createMcpLogger({ name: '@toolcairn/mcp-server:audit-logger' });
 
@@ -84,9 +85,15 @@ export function withAuditLog<TArgs extends Record<string, unknown>>(
           status,
           duration_ms,
         });
-        appendToolCallAudit(projectRoot, entry).catch((err) => {
-          logger.debug({ err, toolName, projectRoot }, 'audit-log: append failed (non-fatal)');
-        });
+        appendToolCallAudit(projectRoot, entry)
+          .then(() => {
+            // Re-render tracker.html with the fresh entry baked in (debounced
+            // 750ms so a burst of tool calls produces one rewrite, not N).
+            scheduleTrackerRewrite(projectRoot);
+          })
+          .catch((err) => {
+            logger.debug({ err, toolName, projectRoot }, 'audit-log: append failed (non-fatal)');
+          });
       }
     }
 
