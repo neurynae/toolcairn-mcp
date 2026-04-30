@@ -233,15 +233,15 @@ Add `--json` for machine-readable output.
 - **Website:** [toolcairn.neurynae.com](https://toolcairn.neurynae.com)
 - **Docs:** [toolcairn.neurynae.com/docs](https://toolcairn.neurynae.com/docs)
 - **npm:** [@neurynae/toolcairn-mcp](https://www.npmjs.com/package/@neurynae/toolcairn-mcp)
-- **GitHub:** [NEURYNAE/toolcairn-mcp](https://github.com/NEURYNAE/toolcairn-mcp)
-- **Issues:** [github.com/NEURYNAE/toolcairn-mcp/issues](https://github.com/NEURYNAE/toolcairn-mcp/issues)
+- **GitHub:** [neurynae/toolcairn-mcp](https://github.com/neurynae/toolcairn-mcp)
+- **Issues:** [github.com/neurynae/toolcairn-mcp/issues](https://github.com/neurynae/toolcairn-mcp/issues)
 - **Security:** responsible disclosure to `security@neurynae.com`
 
 ---
 
 ## Contributing
 
-Issues and feature requests are welcome at [github.com/NEURYNAE/toolcairn-mcp/issues](https://github.com/NEURYNAE/toolcairn-mcp/issues).
+Issues and feature requests are welcome at [github.com/neurynae/toolcairn-mcp/issues](https://github.com/neurynae/toolcairn-mcp/issues).
 
 The graph engine, search pipeline, and indexer are closed-source. This repository contains the public MCP client and project-config layer that runs on user machines.
 

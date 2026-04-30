@@ -1,6 +1,6 @@
 {
   "name": "@neurynae/toolcairn-mcp",
-  "version": "0.10.23",
+  "version": "0.10.24",
   "private": false,
   "license": "MIT",
   "type": "module",
@@ -9,10 +9,10 @@
   "author": "NEURYNAE <support@neurynae.com>",
   "repository": {
     "type": "git",
-    "url": "https://github.com/NEURYNAE/toolcairn-mcp"
+    "url": "https://github.com/neurynae/toolcairn-mcp"
   },
   "bugs": {
-    "url": "https://github.com/NEURYNAE/toolcairn-mcp/issues",
+    "url": "https://github.com/neurynae/toolcairn-mcp/issues",
     "email": "support@neurynae.com"
   },
   "keywords": [
