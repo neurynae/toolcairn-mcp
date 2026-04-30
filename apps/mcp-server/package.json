@@ -6,9 +6,14 @@
   "type": "module",
   "description": "ToolCairn MCP — graph-powered tool intelligence for AI agents",
   "homepage": "https://toolcairn.neurynae.com",
+  "author": "NEURYNAE <support@neurynae.com>",
   "repository": {
     "type": "git",
     "url": "https://github.com/NEURYNAE/toolcairn-mcp"
+  },
+  "bugs": {
+    "url": "https://github.com/NEURYNAE/toolcairn-mcp/issues",
+    "email": "support@neurynae.com"
   },
   "keywords": [
     "mcp",

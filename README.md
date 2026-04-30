@@ -1,24 +1,26 @@
 <p align="center">
   <a href="https://toolcairn.neurynae.com">
-    <img src="https://raw.githubusercontent.com/NEURYNAE/toolcairn-mcp/main/assets/hero.png" alt="ToolCairn — Tool intelligence for AI coding agents" width="100%">
+    <img src="./assets/hero.png" alt="ToolCairn — Tool intelligence for AI coding agents" width="100%">
   </a>
 </p>
 
 <p align="center">
   <a href="https://www.npmjs.com/package/@neurynae/toolcairn-mcp"><img src="https://img.shields.io/npm/v/@neurynae/toolcairn-mcp" alt="npm version"></a>
   <a href="https://www.npmjs.com/package/@neurynae/toolcairn-mcp"><img src="https://img.shields.io/npm/dm/@neurynae/toolcairn-mcp" alt="npm downloads"></a>
-  <a href="https://github.com/NEURYNAE/toolcairn-mcp/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
   <a href="https://nodejs.org"><img src="https://img.shields.io/badge/node-%3E%3D22-brightgreen" alt="Node.js"></a>
 </p>
 
 # `@neurynae/toolcairn-mcp`
+
+> Source for [`@neurynae/toolcairn-mcp` on npm](https://www.npmjs.com/package/@neurynae/toolcairn-mcp). Install via the package, not from this repo.
 
 ToolCairn is an MCP server that connects your AI coding agent to a continuously-updated graph of **30,000+ open-source tools** across npm, PyPI, Cargo, Maven, Go, Composer, RubyGems, NuGet, Homebrew, and **35+ more registries**. Search, compare, build stacks, and check version compatibility — all from inside Claude Code, Cursor, or any MCP-compatible client.
 
 > **Concrete example.** Your agent receives *"I need a fast HTTP client for Node"* → it calls `search_tools` → ToolCairn returns ranked candidates with maintenance and community signals, alternatives, and a warning if the top pick has questionable activity. No more guessing from blog posts and stale tutorials.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/NEURYNAE/toolcairn-mcp/main/assets/architecture.png" alt="How it connects: Your AI Agent ↔ toolcairn-mcp ↔ ToolCairn Cloud" width="100%">
+  <img src="./assets/architecture.png" alt="How it connects: Your AI Agent ↔ toolcairn-mcp ↔ ToolCairn Cloud" width="100%">
 </p>
 
 The MCP server runs locally as a stdio child of your agent. Tool calls travel over MCP to this package, which proxies the network-bound ones to the ToolCairn Cloud API and handles the local-only ones (project scan, config, audit log) on disk.
@@ -143,7 +145,6 @@ The MCP server exposes 15 tools, grouped by purpose. Most are local (no network)
 
 | Environment variable | Default | Purpose |
 |---|---|---|
-| `TOOLPILOT_API_URL` | `https://api.neurynae.com` | Backend endpoint. Override for self-hosted or staging. |
 | `TOOLCAIRN_TRACKING_ENABLED` | `true` | Set `false` to disable usage event logging (see [Privacy](#privacy--telemetry)). |
 | `LOG_LEVEL` | `info` | Set `debug` for verbose stdio diagnostics. |
 | `MCP_TRANSPORT` | `stdio` | Set `http` for HTTP transport (advanced). |
@@ -248,4 +249,4 @@ The graph engine, search pipeline, and indexer are closed-source. This repositor
 
 ## License
 
-MIT — © 2026 NEURYNAE. See [LICENSE](https://github.com/NEURYNAE/toolcairn-mcp/blob/main/LICENSE).
+MIT — © 2026 NEURYNAE. See [LICENSE](./LICENSE).
