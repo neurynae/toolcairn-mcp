@@ -1,0 +1,25 @@
+version: 2
+updates:
+  # Keep GitHub Actions SHAs current; Dependabot rewrites the SHA + the
+  # trailing version comment together when it opens a bump PR.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      gh-actions:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      patches-and-minors:
+        update-types: ["minor", "patch"]
+        # MCP SDK upgrades sometimes change tool-result wire format; keep
+        # them out of the bulk PR for review attention.
+        exclude-patterns:
+          - "@modelcontextprotocol/sdk"

@@ -5,22 +5,34 @@ on:
     tags:
       - 'v*'   # triggers on v0.1.0, v1.0.0, etc.
 
+# Default to read-only. The publish job opts in to id-token: write below
+# (required for npm provenance via Sigstore OIDC).
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   publish:
     name: Publish @neurynae/toolcairn-mcp
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
         with:
           run_install: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           registry-url: 'https://registry.npmjs.org'
@@ -40,7 +52,10 @@ jobs:
           pnpm --filter @neurynae/toolcairn-mcp build:publish
 
       - name: Publish @neurynae/toolcairn-mcp
-        run: cd apps/mcp-server && npm publish --access public
+        # --provenance attaches a Sigstore attestation tying this tarball
+        # to the exact GitHub commit + workflow run. Verifiable via
+        # `npm audit signatures`. Requires id-token: write (set above).
+        run: cd apps/mcp-server && npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
