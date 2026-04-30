@@ -2,13 +2,51 @@
  * Manages authentication credentials stored in ~/.toolcairn/credentials.json.
  * Authentication is required — there is no anonymous access.
  */
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 const CREDENTIALS_DIR = join(homedir(), '.toolcairn');
 const CREDENTIALS_FILE = join(CREDENTIALS_DIR, 'credentials.json');
 const PENDING_AUTH_FILE = join(CREDENTIALS_DIR, 'pending-auth.json');
+
+const isWindows = process.platform === 'win32';
+
+/**
+ * Atomic-enough write that also tightens filesystem permissions on POSIX.
+ * 0600 means owner read/write only — other local users on a shared box
+ * (CI runners, multi-user dev hosts, jump boxes) can no longer read the
+ * file even if HOME is world-traversable. On Windows the OS already
+ * defaults to user-profile ACLs, which are sufficient.
+ *
+ * The chmod is best-effort — read-only filesystems and exotic FS drivers
+ * will throw, in which case we still wrote the secret (better than
+ * failing the auth flow). We only break the contract if the write itself
+ * fails.
+ */
+async function writeSecure(path: string, contents: string): Promise<void> {
+  await mkdir(CREDENTIALS_DIR, {
+    recursive: true,
+    mode: isWindows ? undefined : 0o700,
+  });
+  await writeFile(path, contents, {
+    encoding: 'utf-8',
+    mode: isWindows ? undefined : 0o600,
+  });
+  if (!isWindows) {
+    // writeFile only honors `mode` on file creation; tighten existing perms too.
+    try {
+      await chmod(path, 0o600);
+    } catch {
+      /* tolerate read-only / unsupported FS */
+    }
+    try {
+      await chmod(CREDENTIALS_DIR, 0o700);
+    } catch {
+      /* tolerate */
+    }
+  }
+}
 
 export interface PendingAuth {
   device_code: string;
@@ -19,8 +57,7 @@ export interface PendingAuth {
 }
 
 export async function savePendingAuth(data: PendingAuth): Promise<void> {
-  await mkdir(CREDENTIALS_DIR, { recursive: true });
-  await writeFile(PENDING_AUTH_FILE, JSON.stringify(data, null, 2), 'utf-8');
+  await writeSecure(PENDING_AUTH_FILE, JSON.stringify(data, null, 2));
 }
 
 export async function loadPendingAuth(): Promise<PendingAuth | null> {
@@ -106,8 +143,7 @@ export async function loadOrCreateCredentials(): Promise<Credentials> {
 }
 
 export async function saveCredentials(creds: Credentials): Promise<void> {
-  await mkdir(CREDENTIALS_DIR, { recursive: true });
-  await writeFile(CREDENTIALS_FILE, JSON.stringify(creds, null, 2), 'utf-8');
+  await writeSecure(CREDENTIALS_FILE, JSON.stringify(creds, null, 2));
 }
 
 export async function getApiKey(): Promise<string> {

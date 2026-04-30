@@ -26,8 +26,22 @@ import { scheduleTrackerRewrite } from '../tools/write-tracker.js';
 
 const logger = createMcpLogger({ name: '@toolcairn/mcp-server:audit-logger' });
 
-/** Cache resolved project_root per CWD for the process lifetime. */
-const cwdRootCache = new Map<string, string | null>();
+/** Cache resolved project_root per CWD with bounded staleness.
+ *
+ *  Positive results (we found a config) cache for 60s — config locations
+ *  basically never move, so paying for a re-walk on every call is wasteful.
+ *  Negative results cache only 5s so a freshly initialized project starts
+ *  logging within seconds rather than after the next process restart.
+ *  Without this expiry, a `toolcairn_init` followed by an immediate
+ *  `read_project_config` from the same cwd would silently drop audit
+ *  entries because the negative cache entry never aged out. */
+interface CacheEntry {
+  value: string | null;
+  expiresAt: number;
+}
+const cwdRootCache = new Map<string, CacheEntry>();
+const POSITIVE_TTL_MS = 60_000;
+const NEGATIVE_TTL_MS = 5_000;
 
 /** MCP tools that issue a `query_id` agents need to follow up on with report_outcome. */
 const RECOMMENDATION_TOOLS = new Set([
@@ -109,9 +123,25 @@ export function withAuditLog<TArgs extends Record<string, unknown>>(
 
 function resolveProjectRoot(args: Record<string, unknown>): string | null {
   // 1. Explicit project_root in args (toolcairn_init / read_project_config /
-  //    update_project_config and anything else passing one).
+  //    update_project_config and anything else passing one). Must be absolute
+  //    AND existent — silent fallback to cwd-walking on a malformed value
+  //    masks misconfigurations and is what the H-MCP-2 audit flagged.
   const explicit = args.project_root;
-  if (typeof explicit === 'string' && explicit.length > 0 && isAbsolute(explicit)) {
+  if (typeof explicit === 'string' && explicit.length > 0) {
+    if (!isAbsolute(explicit)) {
+      logger.warn(
+        { project_root: explicit },
+        'rejected non-absolute project_root — falling back to cwd walk',
+      );
+      return findRootForCwd(process.cwd());
+    }
+    if (!existsSync(explicit)) {
+      logger.warn(
+        { project_root: explicit },
+        'rejected non-existent project_root — falling back to cwd walk',
+      );
+      return findRootForCwd(process.cwd());
+    }
     return explicit;
   }
 
@@ -120,19 +150,20 @@ function resolveProjectRoot(args: Record<string, unknown>): string | null {
 }
 
 function findRootForCwd(cwd: string): string | null {
+  const now = Date.now();
   const cached = cwdRootCache.get(cwd);
-  if (cached !== undefined) return cached;
+  if (cached && cached.expiresAt > now) return cached.value;
 
   let dir = resolve(cwd);
   // Stop at the filesystem root (parent === self).
   while (true) {
     if (existsSync(join(dir, '.toolcairn', 'config.json'))) {
-      cwdRootCache.set(cwd, dir);
+      cwdRootCache.set(cwd, { value: dir, expiresAt: now + POSITIVE_TTL_MS });
       return dir;
     }
     const parent = dirname(dir);
     if (parent === dir) {
-      cwdRootCache.set(cwd, null);
+      cwdRootCache.set(cwd, { value: null, expiresAt: now + NEGATIVE_TTL_MS });
       return null;
     }
     dir = parent;
