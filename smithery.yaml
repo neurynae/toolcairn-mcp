@@ -1,0 +1,11 @@
+# Smithery configuration: https://smithery.ai/docs/config#smitheryyaml
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    properties: {}
+    description: |-
+      ToolCairn works anonymously by default with sensible rate limits.
+      Sign in via the `toolcairn_auth` MCP tool (browser device flow) for higher limits and project-aware features.
+  commandFunction: |-
+    config => ({ command: 'npx', args: ['-y', '@neurynae/toolcairn-mcp'] })

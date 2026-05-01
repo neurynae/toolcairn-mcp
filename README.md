@@ -11,6 +11,13 @@
   <a href="https://nodejs.org"><img src="https://img.shields.io/badge/node-%3E%3D22-brightgreen" alt="Node.js"></a>
 </p>
 
+<p align="center">
+  <a href="https://registry.modelcontextprotocol.io/v0/servers?search=io.github.neurynae/toolcairn-mcp"><img src="https://img.shields.io/badge/MCP%20Registry-listed-7c3aed?logo=anthropic" alt="Official MCP Registry"></a>
+  <a href="https://smithery.ai/server/@neurynae/toolcairn-mcp"><img src="https://img.shields.io/badge/Smithery-listed-orange" alt="Smithery"></a>
+  <a href="https://glama.ai/mcp/servers"><img src="https://img.shields.io/badge/Glama-listed-blueviolet" alt="Glama"></a>
+  <a href="https://mcp.directory"><img src="https://img.shields.io/badge/MCP.Directory-listed-grey" alt="MCP.Directory"></a>
+</p>
+
 # `@neurynae/toolcairn-mcp`
 
 > Source for [`@neurynae/toolcairn-mcp` on npm](https://www.npmjs.com/package/@neurynae/toolcairn-mcp). Install via the package, not from this repo.

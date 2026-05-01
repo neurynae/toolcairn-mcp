@@ -1,10 +1,11 @@
 {
   "name": "@neurynae/toolcairn-mcp",
-  "version": "0.10.24",
+  "version": "1.0.0",
+  "mcpName": "io.github.neurynae/toolcairn-mcp",
   "private": false,
   "license": "MIT",
   "type": "module",
-  "description": "ToolCairn MCP — graph-powered tool intelligence for AI agents",
+  "description": "MCP server that helps AI agents find, compare, and verify the right tools for any build task — across 35+ open-source registries.",
   "homepage": "https://toolcairn.neurynae.com",
   "author": "NEURYNAE <support@neurynae.com>",
   "repository": {
