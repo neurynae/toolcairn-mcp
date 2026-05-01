@@ -5,6 +5,11 @@ All notable changes to `@neurynae/toolcairn-mcp` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2] — 2026-05-01
+
+### Fixed
+- **Critical first-reconnect provisioning bug.** `runPostAuthInit` (the multi-root scan that writes `.toolcairn/config.json` + CLAUDE.md + .mcp.json + .gitignore for every project root under CWD) was running fire-and-forget *after* `server.connect(transport)`. On first reconnect, MCP hosts that close the stdio pipe right after `initialize` returns killed the scan mid-write — leaving sub-projects with no config.json. Moved the cheap part (scan + config write, `disableAutoSubmit: true`, `onlyMissingConfig: true`) before `server.connect`, with a 6s `Promise.race` cap so a slow batch-resolve can't blow Claude Code's ~10s initialize window. The expensive part (auto-push of unknown tools to `/v1/feedback/suggest`) stays in the background refresh as before. Subsequent reconnects are a no-op (existsSync short-circuit).
+
 ## [1.0.1] — 2026-05-01
 
 ### Fixed

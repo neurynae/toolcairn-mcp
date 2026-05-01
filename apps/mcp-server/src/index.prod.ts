@@ -51,12 +51,42 @@ async function main(): Promise<void> {
 
   if (authenticated) {
     logger.info({ user: creds.user_email }, 'Authenticated — starting full server');
-    // Register tool schemas ONLY on the hot path. Auto-refresh runs in the
-    // background AFTER `server.connect(transport)` below so the MCP client's
-    // `initialize` handshake gets an immediate response — blocking it on a
-    // multi-root scan (12 ecosystems + batch-resolve + speculative registry
-    // probes) was the root cause of the 90% first-reconnect failure rate.
     server = await buildProdServer();
+
+    // Block on first-time provisioning ONLY for roots missing config.json,
+    // and ONLY for the cheap part (scan + write). The slow part — auto-push
+    // of unknown_tools to /v1/feedback/suggest — runs in the background
+    // refresh below. On a fresh install with 3 sub-roots the cheap part
+    // is ~2s; the auto-push adds ~4s but doesn't block `initialize`.
+    //
+    // Hard cap at 6s via Promise.race so a slow batch-resolve round-trip
+    // can't strand the MCP `initialize` handshake. If the cap fires the
+    // scan continues in the background (JS promises don't cancel) — any
+    // roots that didn't make the cap simply get picked up by the next
+    // reconnect's existsSync check.
+    //
+    // The previous fire-and-forget pattern had a high first-reconnect
+    // failure rate because MCP hosts closed the stdio pipe right after
+    // `initialize` returned, killing the scan before any config.json hit
+    // disk. Running scan+write before `server.connect` (with this cap)
+    // means `initialize` itself waits for the cheap path, so missing-config
+    // roots reliably get provisioned without blowing the host's timeout.
+    const STARTUP_SCAN_CAP_MS = 6000;
+    try {
+      const scanPromise = runPostAuthInit({
+        agent: 'claude',
+        onlyMissingConfig: true,
+        disableAutoSubmit: true,
+      }).catch((err) => {
+        logger.warn({ err }, 'Sync startup scan errored — refresh will retry in background');
+      });
+      const timeoutPromise = new Promise<void>((resolve) =>
+        setTimeout(resolve, STARTUP_SCAN_CAP_MS),
+      );
+      await Promise.race([scanPromise, timeoutPromise]);
+    } catch (err) {
+      logger.warn({ err }, 'Startup auto-init wrapper failed — server still starts');
+    }
   } else {
     let verificationUri = 'https://toolcairn.neurynae.com/signup';
     let userCode = '';
@@ -146,16 +176,18 @@ async function main(): Promise<void> {
   await server.connect(transport);
   logger.info(authenticated ? 'ToolCairn MCP ready' : 'ToolCairn MCP ready (awaiting sign-in)');
 
-  // Background auto-refresh for authenticated sessions. Fires after the
-  // stdio handshake so a slow scan never blocks `initialize`. Semantics match
-  // the sync path: re-scans every discovered project root, merge-preserves
+  // Background auto-refresh for authenticated sessions. Re-scans every
+  // discovered project root to refresh graph-derived fields (description /
+  // license / homepage_url / docs / package_managers / categories /
+  // canonical_name / match_method) from batch-resolve, while merge-preserving
   // user-set fields (chosen_reason / notes / alternatives_considered /
-  // query_id / chosen_at / confirmed_at), refreshes graph-derived fields
-  // (description / license / homepage_url / docs / package_managers /
-  // categories / canonical_name / match_method) from batch-resolve, keeps
-  // already-drained `unknown_in_graph[].suggested: true` flags. If
-  // batch-resolve is offline, autoInitProject short-circuits the confirmed[]
-  // replacement — no silent flip to non_oss.
+  // query_id / chosen_at / confirmed_at) and already-drained `suggested: true`
+  // flags. If batch-resolve is offline, autoInitProject short-circuits the
+  // confirmed[] replacement — no silent flip to non_oss.
+  //
+  // Fires after the stdio handshake so a slow refresh never blocks `initialize`.
+  // The synchronous block above already guarantees every root has at least
+  // an initial config.json; this is purely a refresh.
   if (authenticated) {
     void runPostAuthInit({ agent: 'claude' })
       .then(async (summary) => {
