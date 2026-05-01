@@ -11,8 +11,14 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  // Use the production-only entry — excludes dev-mode DB packages from the bundle
-  entry: { index: 'src/index.prod.ts' },
+  // Two entries:
+  //   index       — production MCP server (src/index.prod.ts excludes dev-mode DB packages)
+  //   cli/scan    — `npx @neurynae/toolcairn-mcp scan` standalone CLI
+  // Each is bundled independently so `dist/cli/scan.js` exists in the published tarball.
+  entry: {
+    index: 'src/index.prod.ts',
+    'cli/scan': 'src/cli/scan.ts',
+  },
   format: ['esm'],
   target: 'node22',
   outDir: 'dist',

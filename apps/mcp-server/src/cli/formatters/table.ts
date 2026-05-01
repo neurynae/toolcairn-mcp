@@ -24,6 +24,11 @@ export function printScanTable(
     quality_score: number | null;
   }>,
 ): void {
+  if (results.length === 0) {
+    console.log('No dependencies to scan.');
+    return;
+  }
+
   const rows: TableRow[] = results.map((r) => ({
     name: r.name,
     status: `${ICONS[r.status] ?? '?'} ${r.status}`,
@@ -52,11 +57,27 @@ export function printScanTable(
     {} as Record<keyof TableRow, number>,
   );
 
-  const _sep = cols.map((c) => '─'.repeat(widths[c] + 2)).join('┼');
-  const _line = (row: TableRow | typeof headers, _char = ' ') =>
+  const sep = cols.map((c) => '─'.repeat(widths[c] + 2)).join('┼');
+  const line = (row: TableRow | typeof headers) =>
     cols
       .map((c) => ` ${((row as Record<string, string>)[c] ?? '').padEnd(widths[c] ?? 0)} `)
       .join('│');
-  for (const _row of rows) {
+
+  console.log('');
+  console.log(line(headers));
+  console.log(sep);
+  for (const row of rows) {
+    console.log(line(row));
   }
+
+  const healthy = results.filter((r) => r.status === 'healthy').length;
+  const deprecated = results.filter((r) => r.status === 'deprecated').length;
+  const warnings = results.filter((r) => r.status === 'warning').length;
+  const unknown = results.filter((r) => r.status === 'unknown').length;
+
+  console.log('');
+  console.log(
+    `Summary: ${healthy} healthy · ${warnings} warning · ${deprecated} deprecated · ${unknown} unknown (of ${results.length})`,
+  );
+  console.log('');
 }

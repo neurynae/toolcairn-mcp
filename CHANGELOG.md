@@ -5,6 +5,19 @@ All notable changes to `@neurynae/toolcairn-mcp` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] — 2026-05-01
+
+### Fixed
+- `npx @neurynae/toolcairn-mcp scan` no longer crashes with `Cannot find module '.../dist/cli/scan.js'`. Added `cli/scan` as a second tsup entry so the bundled scan CLI is included in the published tarball.
+- **`scan` rewritten on top of the canonical `scanProject` + `batch-resolve` pipeline** — the same resolver that powers `toolcairn_init`. Lookups now go: Qdrant `registry_package_keys` → Qdrant `github_url` → Memgraph name (case-insensitive). Previous releases used `findByName` exact-match against Memgraph, which mis-classified npm-scoped packages (`@biomejs/biome` → graph stores it as `biome`), case-mismatched names (`typescript` lowercase → graph stores `TypeScript`), and ambiguous names (`turbo` matched didi/turbo BPMN engine instead of vercel/turborepo).
+- `scan` now authenticates via the saved JWT from `~/.toolcairn/credentials.json` (written by `toolcairn_auth login`). Previously it called the API unauthenticated and got 401 from the CF Worker.
+- `scan` table output is now real (was a no-op empty `for` loop) and shows `manifest_name → canonical_name` when the graph stores the tool under a different display name.
+- `scan --json` now writes JSON to stdout (was silently dropped before).
+
+### Added
+- `scan` reads each dep's installed manifest (`node_modules/<dep>/package.json`, `Cargo.toml`, `requirements.txt`, etc.) to extract `canonical_package_name` + `github_url` for the resolver — so `@types/*`, npm aliases, and scope-stripped names all resolve correctly.
+- `scan` prints a clear sign-in instruction when no valid credentials exist, instead of failing with an opaque API error.
+
 ## [1.0.0] — 2026-05-01 — Public Launch
 
 ### Added
