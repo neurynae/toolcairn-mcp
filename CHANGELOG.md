@@ -5,6 +5,20 @@ All notable changes to `@neurynae/toolcairn-mcp` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] — 2026-05-02
+
+### Added
+- **`feedback` MCP tool** — agent-only channel for flagging problems with ToolCairn's own MCP tools (separate from `report_outcome`, which closes the loop on user-suggested libraries). Required: `tool_name` (one of the 15 other tools), `severity` (`broken` | `wrong_result` | `low_quality` | `missing_capability` | `confusing`), `message` (≥20 chars). Optional: `query_id`, `expected`, `actual`. Severity is negative-only by enum, so positive feedback is structurally impossible.
+- **Free of daily quota.** Calls to `feedback` are exempt from the daily tool-call cap and bonus-credit charge — agents can flag a broken response without being rate-limited out of using ToolCairn. Per-minute IP rate limit still applies (DoS guard). Implemented as a CF Worker `UNMETERED_PATHS` carve-out.
+- **Universal `feedback_channel` footer.** Every other tool's response now includes a `feedback_channel` hint in `data` so the agent learns the channel exists right where it can act on it. Phrased conditionally ("If wrong/broken... Skip if useful") to discourage drift.
+
+### Drift safeguards (5-layer defense)
+- Schema-level: `severity` is required + negative-only; `message.min(20)` blocks "fine"/"ok" loops.
+- Description-level: Pattern C guardrail ("ONLY call when X — never for Y"), matching `check_issue`'s "LAST RESORT" voice.
+- Footer phrasing: explicit skip-instruction, not invitational.
+- Server-side dedup: `dedupe_key = sha256(user_id|tool_name|severity|message[:200])` collapses repeated complaints within a 24h window into one row.
+- Soft per-user rate limit: >30 reports/hour for the same user starts dropping with a `throttled: true` ack so admin queues don't drown.
+
 ## [1.0.2] — 2026-05-01
 
 ### Fixed

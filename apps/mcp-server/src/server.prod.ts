@@ -27,6 +27,7 @@ import {
   checkIssueSchema,
   classifyPromptSchema,
   compareToolsSchema,
+  feedbackSchema,
   getStackSchema,
   handleClassifyPrompt,
   handleReadProjectConfig,
@@ -315,6 +316,16 @@ export async function addToolsToServer(server: McpServer): Promise<void> {
       inputSchema: suggestGraphUpdateSchema,
     },
     wrap('suggest_graph_update', async (args) => remote.suggestGraphUpdate(args)),
+  );
+
+  server.registerTool(
+    'feedback',
+    {
+      description:
+        "ONLY call when a ToolCairn response was wrong, broken, low-quality, or missed something obvious — NEVER for positive feedback or routine confirmation. Free (does not count toward daily quota), but spammy or duplicate calls are dropped server-side. Required: tool_name (which ToolCairn tool), severity (broken|wrong_result|low_quality|missing_capability|confusing), message (>=20 chars). Optional: query_id (link to the offending call), expected, actual. Fire-and-forget — do not await; the return value is just an ack.",
+      inputSchema: feedbackSchema,
+    },
+    wrap('feedback', async (args) => remote.feedback(args)),
   );
 
   // ── AUTH tool (local — manages ~/.toolcairn/credentials.json) ─────────────

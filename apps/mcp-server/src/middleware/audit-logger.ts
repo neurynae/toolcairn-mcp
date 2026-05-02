@@ -51,6 +51,11 @@ const RECOMMENDATION_TOOLS = new Set([
   'refine_requirement',
 ]);
 
+/** Tools that DON'T receive a feedback_channel footer. The `feedback` tool
+ *  itself must be excluded — we'd otherwise tell the agent to call feedback
+ *  on its own feedback response, which is both confusing and recursive. */
+const SKIP_FEEDBACK_FOOTER = new Set<string>(['feedback']);
+
 /** MCP tools whose existence we never log (avoids feedback loops). */
 const SKIP_AUDIT = new Set<string>([
   // Currently empty — but reserved if e.g. a heartbeat tool is added later.
@@ -86,6 +91,14 @@ export function withAuditLog<TArgs extends Record<string, unknown>>(
     // ── Augment recommendation responses with a next_action reminder ─────────
     if (result && status === 'ok' && RECOMMENDATION_TOOLS.has(toolName)) {
       result = injectNextActionHint(result, toolName);
+    }
+
+    // ── Universal: inject feedback_channel footer on every tool's response ──
+    // Conditional phrasing ("Skip if useful — feedback is for problems only")
+    // is the active drift-prevention. Schema-level guardrails (severity is
+    // negative-only, message.min(20)) and server-side dedup pick up the rest.
+    if (result && !SKIP_FEEDBACK_FOOTER.has(toolName)) {
+      result = injectFeedbackChannel(result, toolName);
     }
 
     // ── Fire-and-forget audit append ────────────────────────────────────────
@@ -373,6 +386,59 @@ function buildHint(toolName: string, queryId: string): string {
     return `Use the decomposition to call get_stack or search_tools (passing query_id="${queryId}"); after the user actually uses the chosen tool, call report_outcome({ query_id: "${queryId}", chosen_tool, outcome }).`;
   }
   return `After the user actually uses one of the suggested tools (or replaces it), call report_outcome({ query_id: "${queryId}", chosen_tool, outcome }) to close the feedback loop.`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Response augmentation: inject `feedback_channel` on every non-feedback tool
+// ─────────────────────────────────────────────────────────────────────────────
+
+const FEEDBACK_CHANNEL_HINT =
+  'If this response was wrong/broken/low-quality, call feedback({ tool_name, severity, message, query_id }) — severity ∈ {broken|wrong_result|low_quality|missing_capability|confusing}. Skip if the response was useful — feedback is for problems only, and free of daily quota.';
+
+/**
+ * Inject a `feedback_channel` field into the response's `data` object so the
+ * agent learns the feedback tool exists right where it can act on it. Phrased
+ * conditionally ("If wrong... Skip if useful") to discourage drift — agents
+ * over-eagerly call any tool they're reminded about. If the response payload
+ * has no `data` object (or isn't JSON), wrap a minimal one rather than mangle.
+ */
+function injectFeedbackChannel(result: CallToolResult, toolName: string): CallToolResult {
+  try {
+    const first = result.content?.[0];
+    if (!first || first.type !== 'text') return result;
+
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(first.text) as Record<string, unknown>;
+    } catch {
+      // Non-JSON response (e.g. plain-text limit-exhausted message) — skip.
+      return result;
+    }
+
+    if (!parsed || typeof parsed !== 'object') return result;
+
+    const existingData = parsed.data;
+    const data: Record<string, unknown> =
+      existingData && typeof existingData === 'object'
+        ? (existingData as Record<string, unknown>)
+        : {};
+
+    // Don't overwrite if a handler already populated this field.
+    if (typeof data.feedback_channel === 'string' && data.feedback_channel.length > 0) {
+      return result;
+    }
+
+    data.feedback_channel = FEEDBACK_CHANNEL_HINT;
+    data.feedback_about_tool = toolName;
+    parsed.data = data;
+
+    return {
+      ...result,
+      content: [{ type: 'text', text: JSON.stringify(parsed) }],
+    };
+  } catch {
+    return result;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

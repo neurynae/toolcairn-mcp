@@ -104,7 +104,7 @@ On first session, `toolcairn_init` walks your repo, parses every manifest (`pack
 
 ## Available Tools
 
-The MCP server exposes 15 tools, grouped by purpose. Most are local (no network) or fire-and-forget; the search, compare, and stack tools call the ToolCairn API.
+The MCP server exposes 16 tools, grouped by purpose. Most are local (no network) or fire-and-forget; the search, compare, and stack tools call the ToolCairn API.
 
 ### Discovery
 
@@ -136,6 +136,7 @@ The MCP server exposes 15 tools, grouped by purpose. Most are local (no network)
 | Tool | What it does |
 |---|---|
 | `report_outcome` | Fire-and-forget: did the recommended tool work out? Closes the learning loop. |
+| `feedback` | **Agent feedback on ToolCairn itself.** Call ONLY when a ToolCairn response was wrong, broken, low-quality, or missed something — never for positive feedback. **Free of daily quota.** |
 | `suggest_graph_update` | Submit a new tool, edge, or use-case for admin review (staged, never auto-promoted). |
 | `check_issue` | **Last resort.** Search a tool's GitHub issues for known bugs — only after 4+ retries and a docs review. |
 

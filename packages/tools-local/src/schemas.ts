@@ -194,3 +194,33 @@ export const refineRequirementSchema = {
     })
     .optional(),
 };
+
+// `feedback` — agent-only channel for flagging problems with ToolCairn's own
+// MCP tools. Severity is required + negative-only by enum, so positive feedback
+// is structurally impossible. message.min(20) blocks "fine"/"ok" loops.
+// tool_name enumerates the OTHER 15 tools (not `feedback` itself — no recursion).
+// Free of daily quota (CF Worker UNMETERED_PATHS).
+export const feedbackSchema = {
+  tool_name: z.enum([
+    'classify_prompt',
+    'search_tools',
+    'search_tools_respond',
+    'get_stack',
+    'check_compatibility',
+    'compare_tools',
+    'refine_requirement',
+    'check_issue',
+    'verify_suggestion',
+    'report_outcome',
+    'suggest_graph_update',
+    'toolcairn_init',
+    'read_project_config',
+    'update_project_config',
+    'toolcairn_auth',
+  ]),
+  severity: z.enum(['broken', 'wrong_result', 'low_quality', 'missing_capability', 'confusing']),
+  message: z.string().min(20).max(2000),
+  query_id: z.string().uuid().optional(),
+  expected: z.string().max(1000).optional(),
+  actual: z.string().max(1000).optional(),
+};

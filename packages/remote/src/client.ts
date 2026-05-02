@@ -268,6 +268,10 @@ export class ToolCairnClient {
     return this.post('/v1/feedback/suggest', args);
   }
 
+  async feedback(args: unknown): Promise<CallToolResult> {
+    return this.post('/v1/feedback/agent-feedback', args);
+  }
+
   // ── Registration ─────────────────────────────────────────────────────────
 
   async register(clientId: string): Promise<{ ok: boolean; client_id: string }> {
