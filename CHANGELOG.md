@@ -5,6 +5,18 @@ All notable changes to `@neurynae/toolcairn-mcp` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] — 2026-05-03
+
+### Added
+- **`get_stack` accepts `existing_tools`.** Agents can now pass the project's already-confirmed tools (from `.toolcairn/config.json` `tools.confirmed[].name`) so the stack assembler prefers them over equivalent unconfirmed alternatives. When a confirmed tool appears in any sub-need's candidate set, it wins that slot regardless of relative score. Keeps stacks consistent across calls and avoids re-discovering tools the user already adopted. Engine handler logs `confirmedCount` for observability.
+
+### Companion engine fixes (data resolution)
+- Engine resolver now consults `package_managers[].packageName` in addition to `Tool.name` (e.g. agent passes `next` → resolves to `vercel/next.js` whose npm packageName is `"next"`, not `alibaba-fusion/next` whose basename is `"next"`). The 27+ canonical tools that GitHub-basename collisions shadowed (next, react, vue, …) are now reachable.
+- `FIND_TOOL_BY_NAME` Cypher orders by `is_canonical DESC, health_stars DESC` so name collisions resolve deterministically to the canonical record (Memgraph has no UNIQUE constraint on `Tool.name`).
+- Removed the `repo_too_large_for_index` mega-repo skip in the indexer. The OOM justification didn't match the current code (no contributor/commit pagination is performed). The most-popular tools (`facebook/react`, `microsoft/vscode`, `tensorflow/tensorflow`, `ollama/ollama`, `twbs/bootstrap`, …) now index normally.
+- Added a Qdrant-fallback path in `index-consumer.ts`: when a full crawl fails for any reason (OOM, transient API error, network glitch), sync the existing Qdrant payload into Memgraph as a degraded but valid Tool node. Tools still get indexed; nothing gets silently skipped.
+- README sanitizer strips inline `data:base64` URIs, embedded `<svg>` blocks, and oversized fenced code blocks before any size cap is checked. Removes the bulk that bloats mega-repo READMEs without losing semantic content (install commands, API examples, doc links).
+
 ## [1.1.0] — 2026-05-02
 
 ### Added

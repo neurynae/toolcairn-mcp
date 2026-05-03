@@ -54,6 +54,12 @@ export const getStackSchema = {
       license: z.string().optional(),
     })
     .optional(),
+  /**
+   * Tool names already confirmed in the project's `.toolcairn/config.json`.
+   * When a confirmed tool appears in a sub-need's candidate set, it's preferred
+   * over an equivalent unconfirmed tool for that slot.
+   */
+  existing_tools: z.array(z.string().min(1)).max(50).optional(),
   limit: z.number().int().positive().max(10).default(5),
 };
 
