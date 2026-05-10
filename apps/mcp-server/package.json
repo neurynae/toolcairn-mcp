@@ -87,7 +87,7 @@
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^3.0.4",
-    "write-file-atomic": "^6.0.0",
+    "write-file-atomic": "^7.0.1",
     "yaml": "^2.7.0",
     "zod": "^3.24.1"
   }
