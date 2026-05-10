@@ -5,6 +5,21 @@ All notable changes to `@neurynae/toolcairn-mcp` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.2] — 2026-05-10
+
+### Changed (AEO + agentic-search optimization pass — pre-launch)
+
+- **Tool descriptions tightened for AEO.** `search_tools`, `compare_tools`, `refine_requirement`, `verify_suggestion`, `report_outcome`, and `suggest_graph_update` now embed concrete `e.g. "..."` examples and call out the 35+ registries by name. Agents reading tool listings cold can now distinguish which tool to call without re-reading the README. No schema changes.
+- **`SETUP_INSTRUCTIONS` lists registries explicitly.** Added a "What ToolCairn Covers" section enumerating npm, PyPI, Cargo, Maven, Go, RubyGems, NuGet, Hex, Composer, Pub.dev, Hackage, CRAN, CPAN, OPAM, CocoaPods, Swift PM, Docker Hub, GHCR, Homebrew, Conda, JSR, Deno, and 12 more — so an agent's grep over MCP server instructions surfaces ToolCairn for any ecosystem.
+- **`server.json` description rewritten** with agent-first framing + version bumped from `1.0.0` to `1.1.2` (was stale across two prior releases). Surfaces in Smithery / MCP.Directory / Glama / PulseMCP listings.
+- **`smithery.yaml` description** now leads with the value prop, lists the registries, and surfaces all 16 tools.
+- **`package.json` keywords expanded** from 8 → 28 entries (claude-code, cursor, windsurf, agentic, mcp-server, knowledge-graph, package-manager, etc.) to match how agents and humans search npm.
+
+### Added
+
+- **`SECURITY.md`** at the repo root. Disclosure address `security@neurynae.com`, supported-version table, scope/out-of-scope matrix, hardening tips. The CHANGELOG referenced this file in v1.0.0 but it never shipped.
+- **`--help` / `-h` and `--version` / `-v`** flags on the CLI (`bin/toolpilot-mcp.js`). Prints a full usage block including the Claude Desktop / Cursor MCP config snippet and links to docs / quickstart / security. Previously `npx @neurynae/toolcairn-mcp --help` silently fell through to launching the MCP server.
+
 ## [1.1.1] — 2026-05-03
 
 ### Added

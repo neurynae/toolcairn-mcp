@@ -5,7 +5,17 @@ startCommand:
     type: object
     properties: {}
     description: |-
-      ToolCairn works anonymously by default with sensible rate limits.
-      Sign in via the `toolcairn_auth` MCP tool (browser device flow) for higher limits and project-aware features.
+      ToolCairn is an agent-first MCP server for tool discovery. It helps AI coding
+      agents find, compare, verify, and stack-build the right open-source libraries
+      across 35+ registries (npm, PyPI, Cargo, Maven, Go, RubyGems, NuGet, Hex,
+      Composer, CocoaPods, Conda, Homebrew, and more) before they write code.
+
+      Anonymous by default with sensible rate limits. Call the `toolcairn_auth`
+      MCP tool (browser device flow) for higher limits, project-aware features,
+      and the `.toolcairn/` per-project knowledge base.
+
+      16 tools across discovery (search_tools, refine_requirement, classify_prompt),
+      stacks (get_stack, check_compatibility), comparison (compare_tools), feedback
+      (report_outcome, suggest_graph_update, feedback), and project config.
   commandFunction: |-
     config => ({ command: 'npx', args: ['-y', '@neurynae/toolcairn-mcp'] })
