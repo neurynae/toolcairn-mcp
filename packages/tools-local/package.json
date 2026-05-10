@@ -39,7 +39,7 @@
     "@types/proper-lockfile": "^4.1.4",
     "@types/write-file-atomic": "^4.0.3",
     "rimraf": "^6.0.1",
-    "typescript": "^5.7.2",
+    "typescript": "^6.0.3",
     "vitest": "^3.0.4"
   }
 }
