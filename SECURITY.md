@@ -16,7 +16,7 @@ We follow [Semantic Versioning](https://semver.org/). Security-relevant fixes sh
 
 **Please do not file a public GitHub issue for security problems.** Instead:
 
-1. Email **[security@neurynae.com](mailto:security@neurynae.com)** with:
+1. Email **[asoni15@neurynae.com](mailto:asoni15@neurynae.com)** with:
    - A description of the vulnerability and the impact you observed
    - Step-by-step reproduction (or a minimal proof-of-concept)
    - The affected version (`npm view @neurynae/toolcairn-mcp version` if unsure)
@@ -51,6 +51,5 @@ If your finding requires a CVE, we will request one through GitHub Security Advi
 
 ## Contact
 
-- Security: security@neurynae.com
-- General: support@neurynae.com
+- General: asoni15@neurynae.com
 - Issues (non-sensitive only): https://github.com/neurynae/toolcairn-mcp/issues
